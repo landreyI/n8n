@@ -1,0 +1,489 @@
+{
+  "name": "Storage & Embedding sub",
+  "nodes": [
+    {
+      "parameters": {
+        "tableId": "=contents",
+        "dataToSend": "autoMapInputData",
+        "inputsToIgnore": "="
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        160
+      ],
+      "id": "779e4caf-b6da-4fc2-802f-1276571c9590",
+      "name": "Create a row",
+      "executeOnce": false,
+      "retryOnFail": false,
+      "credentials": {
+        "supabaseApi": {
+          "id": "a9YsSHip9SsGls3r",
+          "name": "Supabase auto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Data').first().json.statuses.url_model }}{{ $('Data').first().json.statuses.google_api_key }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\t\n  \"model\": \"{{ $('Data').first().json.statuses.model }}\",\t\n  \"content\": {\t\n    \"parts\": [\t\n      {\"text\": {{ JSON.stringify($json.title + \"\\n\" + $json.body) }} }\n    ]\t\n  }\t\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2128,
+        80
+      ],
+      "id": "003a28bf-ad12-41b7-bf5e-a9416ecdb390",
+      "name": "Embedding",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "=contents",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=id",
+              "condition": "eq",
+              "keyValue": "={{ $('Add tags').item.json.id }}"
+            },
+            {
+              "keyName": "=is_vectorized",
+              "condition": "eq",
+              "keyValue": "={{ false }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "=content_vector",
+              "fieldValue": "={{ $json.embedding.values }}"
+            },
+            {
+              "fieldId": "=is_vectorized",
+              "fieldValue": "={{ true }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2304,
+        80
+      ],
+      "id": "2b89213e-bb59-493a-bf30-0a674e92caaf",
+      "name": "Update(add) embedding",
+      "credentials": {
+        "supabaseApi": {
+          "id": "a9YsSHip9SsGls3r",
+          "name": "Supabase auto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "2JcCwxnSG14FFsYc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/2JcCwxnSG14FFsYc",
+          "cachedResultName": "Get Config"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        80
+      ],
+      "id": "184d3bfd-4967-4945-8d05-2b004b70d64c",
+      "name": "Data"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "j2kviTnuaKilwLe6",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/j2kviTnuaKilwLe6",
+          "cachedResultName": "Creating tags"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1600,
+        80
+      ],
+      "id": "840bb20c-528e-426b-86be-84e314fec82d",
+      "name": "Call 'Creating tags'"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d109f613-c493-4801-9574-6e128a9db133",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1776,
+        80
+      ],
+      "id": "330c9d58-7dde-487c-94bb-5a341ed25b67",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "=contents",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "=tags",
+              "fieldValue": "={{ $json.tags }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        80
+      ],
+      "id": "4c88fa75-11d1-426d-866a-63b881b15250",
+      "name": "Add tags",
+      "credentials": {
+        "supabaseApi": {
+          "id": "a9YsSHip9SsGls3r",
+          "name": "Supabase auto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        304,
+        96
+      ],
+      "id": "8658f7cd-9244-48fe-b585-e9c24ab0b72f",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $('When Executed by Another Workflow').all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "id": "c6a83c2f-489c-4c96-8cf0-3c9609c3cee1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d0408f76-eb9b-48d1-a8fe-8690a82ee624",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1072,
+        80
+      ],
+      "id": "e3f3fab9-4b69-4218-ad22-574fef00df6c",
+      "name": "Is created"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1424,
+        80
+      ],
+      "id": "a3e61fad-6327-4515-8628-e1f1755b72de",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cabcb8cb-344a-4bcb-806b-dc871418dac4",
+              "leftValue": "={{ $json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        96
+      ],
+      "id": "8a119b48-b39c-46dc-ae94-41d88074d7b2",
+      "name": "Is Empty"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {}
+      }
+    ]
+  },
+  "connections": {
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Embedding": {
+      "main": [
+        [
+          {
+            "node": "Update(add) embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Creating tags'": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Add tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add tags": {
+      "main": [
+        [
+          {
+            "node": "Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Is Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Is created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is created": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Call 'Creating tags'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Empty": {
+      "main": [
+        [
+          {
+            "node": "Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "FmGQ0PD5xe3wbaDI"
+  },
+  "versionId": "e881c308-4960-4786-989a-9335e8cb2306",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "xc7p9B2MNDyHyL7Q",
+  "tags": []
+}

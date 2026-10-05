@@ -1,0 +1,295 @@
+{
+  "name": "SmartGen - Financial Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financial-audit",
+        "options": {}
+      },
+      "id": "ff840cad-acc8-447c-88a1-f44046f0b552",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1072,
+        48
+      ],
+      "webhookId": "cb48b0a9-83bc-4ab0-b47e-8c4391e90a50"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH loc AS (\n  SELECT id, company_id, name AS location_name\n  FROM locations WHERE id = '{{ $json.body.location_id }}'::uuid\n),\ncalc AS (\n  SELECT COALESCE(SUM(gs.fuel_consumed), 0) AS fuel_litres_calculated\n  FROM generator_sessions gs\n  JOIN generators g ON g.id = gs.generator_id\n  WHERE g.location_id = '{{ $json.body.location_id }}'::uuid\n    AND gs.session_start >= '{{ $json.body.period_start }}'::date\n    AND gs.session_start < '{{ $json.body.period_end }}'::date + INTERVAL '1 day'\n),\nrep AS (\n  SELECT COALESCE(SUM(fl.volume_litres), 0) AS fuel_litres_reported\n  FROM fuel_logs fl\n  JOIN generators g ON g.id = fl.generator_id\n  WHERE g.location_id = '{{ $json.body.location_id }}'::uuid\n    AND fl.type = 'income'\n    AND fl.created_at >= '{{ $json.body.period_start }}'::date\n    AND fl.created_at < '{{ $json.body.period_end }}'::date + INTERVAL '1 day'\n)\nSELECT \n  loc.company_id, \n  loc.location_name,\n  calc.fuel_litres_calculated,\n  rep.fuel_litres_reported\nFROM loc, calc, rep;",
+        "options": {}
+      },
+      "id": "6404a0fe-a791-49a2-a8b7-a3de9f3b7378",
+      "name": "Calculate Metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -896,
+        48
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = $('Webhook').first().json.body;\nconst calculated = parseFloat(input.fuel_litres_calculated || 0);\nconst reported = parseFloat(input.fuel_litres_reported || 0);\n\nlet delta = 0;\nif (calculated > 0) {\n  delta = Math.abs(calculated - reported) / calculated * 100;\n} else if (reported > 0) {\n  delta = 100;\n}\n\nconst has_anomaly = delta > 15;\nlet anomaly_note = null;\nlet alert_message = null;\n\nif (has_anomaly) {\n  const diff = Math.abs(calculated - reported).toFixed(1);\n  const percent = delta.toFixed(1);\n  \n  if (calculated > reported) {\n    anomaly_note = `Можливий злив палива. Спожито за розрахунками на ${diff} л (${percent}%) більше, ніж заправлено.`;\n  } else {\n    anomaly_note = `Некоректний ввід заправок або перевантаження генератора. Заправлено на ${diff} л (${percent}%) більше, ніж витрачено за розрахунками.`;\n  }\n  \n  alert_message = `⚠️ Аномальний розхід на локації <b>${input.location_name}</b> за період ${body.period_start} — ${body.period_end}:\\n\\n${anomaly_note}\\n\\nРозраховано: ${calculated.toFixed(1)} л\\nЗаправлено: ${reported.toFixed(1)} л`;\n}\n\nreturn {\n  ...input,\n  ...body,\n  delta_calculated_reported: parseFloat(delta.toFixed(2)),\n  has_anomaly,\n  anomaly_note,\n  alert_message\n};"
+      },
+      "id": "efd368f9-518a-4ee3-8dc9-dd85ce872b91",
+      "name": "Calculate Delta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO financial_audits (\n  location_id, \n  period_start, \n  period_end, \n  fuel_litres_calculated, \n  fuel_litres_reported, \n  fuel_litres_by_receipts, \n  receipt_amount_uah, \n  delta_calculated_reported, \n  has_anomaly, \n  anomaly_note\n) VALUES (\n  '{{ $json.location_id }}'::uuid, \n  '{{ $json.period_start }}'::date, \n  '{{ $json.period_end }}'::date,\n  {{ $json.fuel_litres_calculated }}, \n  {{ $json.fuel_litres_reported }}, \n  {{ $json.fuel_litres_by_receipts || 'NULL' }}, \n  {{ $json.receipt_amount_uah || 'NULL' }}, \n  {{ $json.delta_calculated_reported }}, \n  {{ $json.has_anomaly }}, \n  {{ $json.anomaly_note ? \"'\" + $json.anomaly_note + \"'\" : 'NULL' }}\n) RETURNING id;",
+        "options": {}
+      },
+      "id": "dfc8cf57-358a-4cdf-87cc-32a17eb6308f",
+      "name": "Save Audit Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -496,
+        48
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"audit_id\": \"{{ $json.id }}\",\n  \"has_anomaly\": {{ $('Calculate Delta').first().json.has_anomaly }}\n}",
+        "options": {}
+      },
+      "id": "a83b4a41-27f7-40bc-af61-5b94f1461406",
+      "name": "Respond to Next.js",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-anomaly",
+              "leftValue": "={{ $('Calculate Delta').first().json.has_anomaly }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6db38a0-dc09-4d6e-acd8-d7a68436577d",
+      "name": "Has Anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -80,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alerts (company_id, location_id, type, message)\nVALUES (\n  '{{ $('Calculate Delta').first().json.company_id }}'::uuid, \n  '{{ $('Calculate Delta').first().json.location_id }}'::uuid, \n  'anomaly', \n  '{{ $('Calculate Delta').first().json.alert_message }}'\n);",
+        "options": {}
+      },
+      "id": "bfd7347b-a44b-4927-b830-f7ba1c63cb6b",
+      "name": "Insert Alert into DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        112,
+        -64
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.telegram_id \nFROM users u\nJOIN user_company_memberships m ON m.user_id = u.id\nWHERE m.company_id = '{{ $('Calculate Delta').first().json.company_id }}'::uuid\n  AND m.role IN ('owner', 'manager')\n  AND u.telegram_id IS NOT NULL;",
+        "options": {}
+      },
+      "id": "84a6b965-af38-4810-97f6-dc995dfcf61e",
+      "name": "Get Managers and Owner",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        320,
+        -64
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_id }}",
+        "text": "={{ $('Calculate Delta').first().json.alert_message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "2e03445b-ba65-4feb-8662-f540ae8d61cb",
+      "name": "Send Alert Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        512,
+        -64
+      ],
+      "webhookId": "a8f92f9e-6d10-483b-86c3-cb7c607597aa",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Calculate Delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Delta": {
+      "main": [
+        [
+          {
+            "node": "Save Audit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Audit Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Next.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Next.js": {
+      "main": [
+        [
+          {
+            "node": "Has Anomaly?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Anomaly?": {
+      "main": [
+        [
+          {
+            "node": "Insert Alert into DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Alert into DB": {
+      "main": [
+        [
+          {
+            "node": "Get Managers and Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Managers and Owner": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8f5bae91-4f5b-4f2a-9ab6-a6e8c76b18e1",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "QS0F0XOgs1d0FWdo",
+  "tags": []
+}

@@ -1,0 +1,363 @@
+{
+  "name": "SmartGen - Yasno Parser",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Split In Batches (Locations)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1248,
+        240
+      ],
+      "id": "4ce9d297-28c1-473e-84a5-0fd4527774fd"
+    },
+    {
+      "parameters": {
+        "jsCode": "const location    = $('Split In Batches (Locations)').item.json;\nconst provider    = $('find region id').first().json;\nconst plannedData = $('Yasno Planned API').first().json;\nconst probableData = $('Yasno Probable API').first().json;\n\nconst outageGroup = location.outage_group;\nconst regionId    = provider.regionId.toString();\nconst dsoId       = provider.dsoId.toString();\n\nconst resultSlots = [];\n\nfunction getKyivOffsetMinutes(dateStr) {\n  const formatter = new Intl.DateTimeFormat('en', {\n    timeZone: 'Europe/Kyiv',\n    timeZoneName: 'longOffset'\n  });\n  const parts = formatter.formatToParts(new Date(`${dateStr}T12:00:00Z`));\n  const tzName = parts.find(p => p.type === 'timeZoneName')?.value ?? 'GMT+02:00';\n  const match  = tzName.match(/GMT([+-])(\\d{2}):(\\d{2})/);\n  if (!match) return 120;\n  const sign = match[1] === '+' ? 1 : -1;\n  return sign * (parseInt(match[2]) * 60 + parseInt(match[3]));\n}\n\nfunction buildSlot(locationId, dateStr, slot, source) {\n  const offsetMins = getKyivOffsetMinutes(dateStr);\n  const startDate = new Date(`${dateStr}T00:00:00Z`);\n  startDate.setUTCMinutes(startDate.getUTCMinutes() - offsetMins + slot.start);\n  const endDate = new Date(`${dateStr}T00:00:00Z`);\n  endDate.setUTCMinutes(endDate.getUTCMinutes() - offsetMins + slot.end);\n  return {\n    location_id:   locationId,\n    planned_start: startDate.toISOString(),\n    planned_end:   endDate.toISOString(),\n    is_confirmed:  false,\n    source:        source\n  };\n}\n\nif (plannedData && typeof plannedData === 'object' && !plannedData.error) {\n  for (const dayKey of ['today', 'tomorrow']) {\n    const day = plannedData[outageGroup]?.[dayKey];\n    if (!day) continue;\n\n    const dateStr = day.date.split('T')[0];\n\n    if (day.status === 'NoOutages') {\n      continue;\n\n    } else if (day.status === 'ScheduleApplies') {\n      for (const slot of day.slots) {\n        if (slot.type !== 'Definite') continue;\n        resultSlots.push(buildSlot(location.id, dateStr, slot, 'yasno'));\n      }\n\n    } else if (day.status === 'WaitingForSchedule' && probableData && !probableData.error) {\n      const jsDay = new Date(`${dateStr}T12:00:00Z`).getDay();\n      const dayOfWeek = (jsDay === 0 ? 6 : jsDay - 1).toString();\n      const probableSlots = probableData[regionId]\n        ?.dsos?.[dsoId]\n        ?.groups?.[outageGroup]\n        ?.slots?.[dayOfWeek] ?? [];\n\n      for (const slot of probableSlots) {\n        if (slot.type !== 'Definite') continue;\n        resultSlots.push(buildSlot(location.id, dateStr, slot, 'probable'));\n      }\n    }\n  }\n}\n\nreturn resultSlots.length > 0\n  ? resultSlots.map(s => ({ json: s }))\n  : [{ json: { location_id: location.id, no_outages: true } }];"
+      },
+      "name": "Code (Парсинг слотів)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        272
+      ],
+      "id": "2a944a75-21c0-4894-96a5-ffb2c8b95b71",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        240
+      ],
+      "id": "c574dfd4-12b8-452a-88c2-0fdc8f9fc50a"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "locations",
+        "limit": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "is_active",
+              "condition": "eq",
+              "keyValue": "={{ true }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        240
+      ],
+      "id": "e178c785-b49b-4803-8841-bd8eb6df2aff",
+      "name": "Active locations",
+      "executeOnce": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "BKSpJI1G0Ix4Q6RD",
+          "name": "Supabase SmartGen"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Получаем данные ТЕКУЩЕЙ локации из цикла\nconst location = $('Split In Batches (Locations)').item.json;\n\nconst providerRegionId = location.provider_region_id; // ID связи из таблицы locations\n\n// 2. Получаем ВСЕ элементы из ноды 'Get Provider' как массив\nconst allProviders = $('Get Providers').all();\n\n// 3. Ищем внутри массива нужный провайдер по ID\nconst matchedProvider = allProviders.find(item => item.json.id === providerRegionId);\n\nif (!matchedProvider) {\n  throw new Error(`Налаштування провайдера для ID ${providerRegionId} не знайдені в таблиці provider_regions`);\n}\n\n\nreturn [{\n  json: {\n    regionId: matchedProvider.json.region_id,\n    dsoId: matchedProvider.json.dso_id\n  }\n}];"
+      },
+      "name": "find region id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        272
+      ],
+      "id": "e303680b-3bef-4ef2-9191-c1f470f160f8"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "provider_regions",
+        "limit": {}
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        240
+      ],
+      "id": "ef6a8f42-2325-461a-8299-f9ec0c036a51",
+      "name": "Get Providers",
+      "credentials": {
+        "supabaseApi": {
+          "id": "BKSpJI1G0Ix4Q6RD",
+          "name": "Supabase SmartGen"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO outage_logs (location_id, planned_start, planned_end, is_confirmed, source)\nVALUES (\n  '{{ $json.location_id }}',\n  '{{ $json.planned_start }}',\n  '{{ $json.planned_end }}',\n  false,\n  'yasno'\n)\nON CONFLICT (location_id, planned_start) DO NOTHING\nRETURNING id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -64,
+        272
+      ],
+      "id": "2ab7fab3-915e-4f4b-a286-c15e488fc8f1",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6d8ff2d5-be4a-45b0-a468-a3e8c8a608d8",
+              "leftValue": "={{ $json.no_outages }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -240,
+        304
+      ],
+      "id": "f7a1c79b-5878-4054-9954-537688df6f2f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "url": "=https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/{{ $json.regionId }}/dsos/{{ $json.dsoId }}/planned-outages",
+        "options": {}
+      },
+      "name": "Yasno Planned API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -848,
+        192
+      ],
+      "id": "5174dede-e8aa-4f24-a59c-03e34dfac847",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://app.yasno.ua/api/blackout-service/public/shutdowns/probable-outages?regionId={{ $json.regionId }}&dsoId={{ $json.dsoId }}",
+        "options": {}
+      },
+      "name": "Yasno Probable API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -848,
+        336
+      ],
+      "id": "d6cb28cd-de29-41f9-9622-91c620f11598",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -624,
+        272
+      ],
+      "id": "dc4469c6-e5b6-484c-a620-9625b141286f",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Split In Batches (Locations)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "find region id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Парсинг слотів)": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Get Providers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Active locations": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches (Locations)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Providers": {
+      "main": [
+        [
+          {
+            "node": "Active locations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find region id": {
+      "main": [
+        [
+          {
+            "node": "Yasno Planned API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Yasno Probable API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches (Locations)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split In Batches (Locations)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yasno Planned API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yasno Probable API": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code (Парсинг слотів)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e019f0a0-9dbc-42c2-ac7c-556c50e02a4e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "Xto75vch0C7Sudcv",
+  "tags": []
+}

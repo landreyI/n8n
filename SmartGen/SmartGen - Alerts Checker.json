@@ -1,0 +1,292 @@
+{
+  "name": "SmartGen - Alerts Checker",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "generator_id"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0e0b30ee-a868-4fe1-a6a5-79082d4f6596",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  g.id                        AS generator_id,\n  g.name                      AS generator_name,\n  g.status                    AS current_status,\n  g.hours_since_last_service,\n  g.maintenance_interval_hours,\n  g.current_fuel_litres,\n  g.tank_volume_litres,\n  g.consumption_per_hour,\n  g.accumulated_hours,\n  l.id                        AS location_id,\n  l.name                      AS location_name,\n  l.company_id,\n  -- Остання критична тривога щодо палива\n  (SELECT MAX(created_at) FROM public.alerts WHERE generator_id = g.id AND type = 'fuel_critical') AS last_fuel_critical_alert,\n  -- Остання тривога щодо низького рівня палива\n  (SELECT MAX(created_at) FROM public.alerts WHERE generator_id = g.id AND type = 'fuel_low') AS last_fuel_low_alert,\n  -- Остання заправка (income)\n  (SELECT MAX(created_at) FROM public.fuel_logs WHERE generator_id = g.id AND type = 'income') AS last_refuel\nFROM generators g\nJOIN locations l ON l.id = g.location_id\nWHERE g.id = '{{ $('When Executed by Another Workflow').item.json.generator_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        176,
+        0
+      ],
+      "id": "5b7773de-484c-4485-b85e-8bb955d01565",
+      "name": "Get generator state",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $input.first().json;\n\n// --- Перевірка ТО ---\nconst servicePct = Math.round(\n  (g.hours_since_last_service / g.maintenance_interval_hours) * 100\n);\n\nlet maintenanceAlert = null;\n\nif (servicePct >= 100 && g.current_status !== 'critical') {\n  maintenanceAlert = {\n    type:    'maintenance_critical',\n    message: `🔴 Генератор \"${g.generator_name}\" (${g.location_name}): ТО прострочено! ${g.hours_since_last_service} год з ${g.maintenance_interval_hours} год. Негайно виконайте обслуговування.`,\n    new_status: 'critical'\n  };\n} else if (servicePct >= 80 && servicePct < 100 && g.current_status === 'ok') {\n  maintenanceAlert = {\n    type:    'maintenance_warning',\n    message: `🟡 Генератор \"${g.generator_name}\" (${g.location_name}): наближається ТО. Відпрацьовано ${g.hours_since_last_service} год з ${g.maintenance_interval_hours} год (${servicePct}%).`,\n    new_status: 'warning'\n  };\n}\n\n// --- Перевірка палива ---\nconst fuelPct   = Math.round((g.current_fuel_litres / g.tank_volume_litres) * 100);\nconst hoursLeft = Math.round((g.current_fuel_litres / g.consumption_per_hour) * 10) / 10;\n\nlet fuelAlert = null;\n\nconst lastRefuel = g.last_refuel ? new Date(g.last_refuel) : null;\n\nif (fuelPct <= 5) {\n  const lastCriticalAlert = g.last_fuel_critical_alert ? new Date(g.last_fuel_critical_alert) : null;\n  // Надсилаємо, якщо ніколи не надсилали АБО була заправка після останнього критичного алерта\n  const shouldSendCritical = !lastCriticalAlert || (lastRefuel && lastRefuel > lastCriticalAlert);\n\n  if (shouldSendCritical) {\n    fuelAlert = {\n      type:    'fuel_critical',\n      message: `🔴 Генератор \"${g.generator_name}\" (${g.location_name}): КРИТИЧНО мало палива! Залишок: ${g.current_fuel_litres} л (${fuelPct}%). Роботи приблизно на ${hoursLeft} год.`\n    };\n  }\n} else if (fuelPct <= 20) {\n  const lastLowAlert = g.last_fuel_low_alert ? new Date(g.last_fuel_low_alert) : null;\n  // Надсилаємо, якщо ніколи не надсилали АБО була заправка після останнього низького алерта\n  const shouldSendLow = !lastLowAlert || (lastRefuel && lastRefuel > lastLowAlert);\n\n  if (shouldSendLow) {\n    fuelAlert = {\n      type:    'fuel_low',\n      message: `🟡 Генератор \"${g.generator_name}\" (${g.location_name}): мало палива. Залишок: ${g.current_fuel_litres} л (${fuelPct}%). Роботи приблизно на ${hoursLeft} год.`\n    };\n  }\n}\n\nreturn [{\n  json: {\n    generator_id:     g.generator_id,\n    location_id:      g.location_id,\n    company_id:       g.company_id,\n    current_status:   g.current_status,\n    maintenance_alert: maintenanceAlert,\n    fuel_alert:        fuelAlert,\n    has_any_alert:     !!(maintenanceAlert || fuelAlert)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        0
+      ],
+      "id": "afc5afa5-5422-40c9-bc29-2aa6217be614",
+      "name": "Calculate thresholds"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1cc7423-798f-41ed-b0b1-17ae8bff25f5",
+              "leftValue": "={{ $json.has_any_alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        528,
+        0
+      ],
+      "id": "3c1cb2ce-b4eb-4b56-a413-ba723740cbc8",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  u.telegram_id,\n  u.full_name,\n  m.role\nFROM public.users u\nJOIN public.user_company_memberships m ON u.id = m.user_id\nWHERE m.company_id = '{{ $json.company_id }}'\n  AND m.role IN ('owner', 'manager')\n  AND u.telegram_id IS NOT NULL;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        752,
+        -64
+      ],
+      "id": "9e69b436-8a5b-4878-9f6b-333aa4157fc3",
+      "name": "Get recipients",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const thresholds  = $('Calculate thresholds').item.json;\nconst recipients  = $input.all().map(r => r.json);\n\nconst alerts = [\n  thresholds.maintenance_alert,\n  thresholds.fuel_alert\n].filter(Boolean);\n\nconst messages = [];\n\nfor (const recipient of recipients) {\n  for (const alert of alerts) {\n    messages.push({\n      json: {\n        telegram_id:  recipient.telegram_id,\n        message:      alert.message,\n        type:         alert.type,\n        generator_id: thresholds.generator_id,\n        location_id:  thresholds.location_id,\n        company_id:   thresholds.company_id,\n        new_status:   alert.new_status ?? null\n      }\n    });\n  }\n}\n\nreturn messages;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -64
+      ],
+      "id": "c47e14ef-f212-4833-852b-fcb07b8629a8",
+      "name": "Prepare messages"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        80
+      ],
+      "id": "5670b2cc-7cf5-4f8b-8323-1bf096b161db",
+      "name": "Send Telegram alert",
+      "webhookId": "ff02c140-3a92-46d1-80f4-ab5f01f8f478",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alerts (company_id, generator_id, location_id, type, message)\nVALUES (\n  '{{ $json.company_id }}',\n  '{{ $json.generator_id }}',\n  '{{ $json.location_id }}',\n  '{{ $json.type }}',\n  '{{ $json.message.replace(/\\'/g, \"\\'\\'\") }}'\n)\nON CONFLICT DO NOTHING;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1136,
+        -64
+      ],
+      "id": "3a6ff2a0-cb17-4346-bd15-5801eb5f5dbf",
+      "name": "Save alert to DB",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE generators\nSET status = '{{ $('Prepare messages').item.json.new_status }}'\nWHERE id = '{{ $('Prepare messages').item.json.generator_id }}'\n  AND '{{ $('Prepare messages').item.json.new_status }}' IS NOT NULL;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1312,
+        -64
+      ],
+      "id": "d726ecac-ba1b-4db7-a3ff-6cd4ea37c84a",
+      "name": "Update generator status",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get generator state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get generator state": {
+      "main": [
+        [
+          {
+            "node": "Calculate thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate thresholds": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get recipients": {
+      "main": [
+        [
+          {
+            "node": "Prepare messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare messages": {
+      "main": [
+        [
+          {
+            "node": "Save alert to DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save alert to DB": {
+      "main": [
+        [
+          {
+            "node": "Update generator status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "deaa7425-3345-42c5-a6e5-e59c09f85638",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "y8xXUPGGkMjbnMPk",
+  "tags": []
+}

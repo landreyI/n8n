@@ -1,0 +1,3213 @@
+{
+  "name": "SmartGen - Telegram Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  u.id AS user_id,\n  COALESCE(\n    (u.telegram_state->>'active_company_id')::uuid,\n    (SELECT company_id FROM user_company_memberships WHERE user_id = u.id LIMIT 1)\n  ) AS company_id,\n  u.full_name,\n  COALESCE(\n    (SELECT role FROM user_company_memberships WHERE user_id = u.id AND company_id = COALESCE((u.telegram_state->>'active_company_id')::uuid, (SELECT company_id FROM user_company_memberships WHERE user_id = u.id LIMIT 1))),\n    'staff'\n  ) AS role,\n  u.telegram_state,\n  (SELECT name FROM companies WHERE id = COALESCE((u.telegram_state->>'active_company_id')::uuid, (SELECT company_id FROM user_company_memberships WHERE user_id = u.id LIMIT 1))) AS company_name\nFROM users u\nWHERE u.telegram_id = {{ $json.user_id }};",
+        "options": {}
+      },
+      "id": "ce1bb57a-f6be-4db9-8346-39c0809f2987",
+      "name": "Get User state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1168,
+        688
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "user-exists",
+              "leftValue": "={{ $json.user_id }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dd85b1c6-10e2-42b7-bd03-53ddfbc36cf3",
+      "name": "User found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "5JTnivZq7nNejHH5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/5JTnivZq7nNejHH5",
+          "cachedResultName": "SmartGen - Callback Data"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        800,
+        688
+      ],
+      "id": "a6aee3a4-4283-4e3f-9b16-4884ebe9821d",
+      "name": "Callback Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger = $('Telegram Message Trigger').first().json;\n\n// универсальный рекурсивный поиск по ключу\nfunction findObject(obj, keyName) {\n  if (!obj || typeof obj !== 'object') return null;\n\n  if (obj[keyName]) {\n    return obj[keyName];\n  }\n\n  for (const key of Object.keys(obj)) {\n    const result = findObject(obj[key], keyName);\n    if (result) return result;\n  }\n\n  return null;\n}\n\nconst chat = findObject(trigger, \"chat\");\nconst from = findObject(trigger, \"from\");\n\nreturn [\n  {\n    json: {\n      chat_id: chat?.id,\n      chat_type: chat?.type,\n      user_id: from?.id,\n      username: from?.username,\n      fist_name: from?.first_name,\n      text: trigger?.message?.text ?? null,\n      message_id: trigger?.message?.message_id ?? trigger?.callback_query.message.message_id \n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        688
+      ],
+      "id": "6434e679-0ef2-44b8-99ab-cfeaa3f351d2",
+      "name": "Parser tg trigger"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4ae742ba-a0d0-47c8-84ed-dabd6515ba14",
+                    "leftValue": "={{ $('Telegram Message Trigger').item.json.message.text }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "input_text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b2ffe81d-ba67-43f2-b470-d1dfe6c228b0",
+                    "leftValue": "={{ $('Telegram Message Trigger').item.json.callback_query }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "callback"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1536,
+        832
+      ],
+      "id": "4450d24b-fe1f-48e5-9ad8-b7b178c29847",
+      "name": "Switch  message type"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Получаем все кнопки из исходного сообщения\nconst buttons = $('Telegram Message Trigger')\n  .first()\n  .json\n  .callback_query\n  .message\n  .reply_markup\n  .inline_keyboard\n  .flat();\n\n// Получаем сырые данные из нажатой кнопки (например, \"approve_idea:uuid-123:done\")\nconst rawCallbackData = $('Telegram Message Trigger').first().json.callback_query.data;\n\n// Разбиваем строку по разделителю ':'\nconst parts = rawCallbackData.split(':');\n\n// Присваиваем части переменным\nconst callback_type = parts[0];\nconst targetValue = parts.length === 3 ? parts[2] : parts[1];\nconst targetOptionalValue = parts.length === 3 ? parts[1] : null; // Если третьей части нет, будет null\n\n// Ищем текст нажатой кнопки\nlet text;\n\nfor (const btn of buttons) {\n  // Пропускаем кнопки без callback_data (например, URL-кнопки)\n  if (!btn.callback_data) continue;\n  \n  // Разбиваем callback_data каждой кнопки в цикле\n  const btnParts = btn.callback_data.split(':');\n  const btnValue = btnParts[1];\n  const btnOptionalValue = btnParts[2] || null;\n\n  // Сравниваем данные, чтобы найти нужную кнопку\n  if (targetOptionalValue) {\n    // Если в нажатой кнопке был optional_value, сравниваем все части\n    if (btnValue === targetValue && btnOptionalValue === targetOptionalValue) {\n      text = btn.text;\n      break;\n    }\n  } else {\n    // Если optional_value не было, ищем кнопку, где его тоже нет\n    if (btnValue === targetValue && !btnOptionalValue) {\n      text = btn.text;\n      break;\n    }\n  }\n}\n\nreturn [{\n  json: {\n    callback_type,\n    value: targetValue,\n    optional_value: targetOptionalValue,\n    text\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        1088
+      ],
+      "id": "3435e37d-eb0f-46fa-a9ab-4fdafb10c3fc",
+      "name": "Find the button"
+    },
+    {
+      "parameters": {
+        "updates": "={{ [\"message\",\"callback_query\"] }}",
+        "additionalFields": {
+          "download": false
+        }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        624,
+        688
+      ],
+      "id": "15eb0447-b92a-4159-b4aa-f7fba20130f6",
+      "name": "Telegram Message Trigger",
+      "webhookId": "d720c31a-4ebc-4e86-9ae9-763d8c6fa002",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c7e76404-e341-4214-854a-12c4d40982ab",
+                    "leftValue": "={{ $json.callback_type }}",
+                    "rightValue": "={{ $('Callback Data').item.json.callback_value.validCallBack[0] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "confirm_outage"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3361c8c3-6467-4ff9-97fe-8bead8d2dac5",
+                    "leftValue": "={{ $json.callback_type }}",
+                    "rightValue": "={{ $('Callback Data').item.json.callback_value.validCallBack[1] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "adjust_outage"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "dbe5c2cd-57b0-47bd-b7e4-a7e0a4cbc3d1",
+                    "leftValue": "={{ $json.callback_type }}:{{ $json.optional_value }}",
+                    "rightValue": "={{ $('Callback Data').item.json.callback_value.validCallBack[2] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_generator:refuel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8fd9dcaa-e708-40eb-a8cd-4445afe9e916",
+                    "leftValue": "={{ $json.callback_type }}:{{ $json.optional_value }}",
+                    "rightValue": "={{ $('Callback Data').item.json.callback_value.validCallBack[3] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_generator:maintenance"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2d388348-6fbb-4509-9f71-9692b15a3d9f",
+                    "leftValue": "={{ $json.callback_type }}:{{ $json.optional_value }}",
+                    "rightValue": "={{ $('Callback Data').item.json.callback_value.validCallBack[4] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "select_generator:report"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1536,
+        1296
+      ],
+      "id": "bb40e9bc-4307-4f24-a108-3d9a425a23f4",
+      "name": "Callback"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6d656800-38ef-4078-a97f-4792ba2dab43",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text }}",
+                    "rightValue": "/menu_refuel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/menu_refuel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "996a9c69-0b28-4c1d-977f-bf21521dcb8b",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text }}",
+                    "rightValue": "/menu_maint",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/menu_maint"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2de83ede-593e-4075-bbe8-fa2a223b613a",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text }}",
+                    "rightValue": "/menu_problem",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/menu_problem"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "80b027a1-f33a-47c6-9791-580acdcae3a8",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text }}",
+                    "rightValue": "/menu_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/menu_status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ec40b8d0-b9d1-4090-a2fd-9ceacb8bf6ab",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text }}",
+                    "rightValue": "/start",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "/start"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "65748678-e409-4869-b576-2d7fd68d8ace",
+                    "leftValue": "={{ $('Parser tg trigger').item.json.text && !$('Telegram Message Trigger').item.json.message.from.is_bot }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "user_iput"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1888,
+        736
+      ],
+      "id": "4cd62b5e-8c6c-4115-a058-26ac6c791f2a",
+      "name": "Switch solution"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Get User state').item.json.telegram_state.state }}",
+                    "rightValue": "awaiting_refuel_volume",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "81b72c81-9c02-41c8-ad70-dfa18e18a2fe"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_refuel_volume"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "38173ee7-638d-44e7-9d1d-3defbe6d82c0",
+                    "leftValue": "={{ $('Get User state').item.json.telegram_state.state }}",
+                    "rightValue": "=awaiting_pin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_pin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "85d8705a-af41-4132-99f5-781d5d6374ae",
+                    "leftValue": "={{ $('Get User state').item.json.telegram_state.state }}",
+                    "rightValue": "awaiting_problem_report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_problem_report"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f7d15ac4-4450-462d-bb41-9381b00ff924",
+                    "leftValue": "={{ $('Get User state').item.json.telegram_state.state }}",
+                    "rightValue": "awaiting_actual_start",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_actual_start"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bba7f17a-f341-4487-86e1-65c5c311eba9",
+                    "leftValue": "={{ $('Get User state').item.json.telegram_state.state }}",
+                    "rightValue": "awaiting_actual_end",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_actual_end"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2752,
+        1280
+      ],
+      "id": "f67fc628-a3a9-4d12-aaf8-280d57cc2c0c",
+      "name": "Switch solution1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "🔌 Головне меню SmartGen. Оберіть дію на клавіатурі нижче:",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e7e42773-2a39-4e8d-b01b-1d3fe377003b",
+      "name": "Telegram: Main Menu",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2512,
+        1024
+      ],
+      "webhookId": "90dcac0d-ed30-4505-93c5-6743abc76f7e",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "volume-valid-check",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bac1bd6d-d9a6-4bfe-a9c0-b0328d5de36b",
+      "name": "Volume valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3232,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "pin-correct-check",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d6d467d5-b3ca-4cd1-a1b7-5a553b3c6c1b",
+      "name": "PIN correct?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3408,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "messageId": "={{ $('Parser tg trigger').item.json.message_id }}",
+        "text": "✅ Відключення підтверджено персоналом.",
+        "additionalFields": {}
+      },
+      "id": "de723a4a-11c4-4342-bb56-36000ac566c5",
+      "name": "Telegram: Confirm outage edit",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2048,
+        1168
+      ],
+      "webhookId": "476f4056-59e8-4f89-80f1-7cf237762d1c",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wWIWt4lPJXctaE07",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wWIWt4lPJXctaE07",
+          "cachedResultName": "SmartGen - Engine Hours Calculator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "09ce378d-6a41-4150-9b87-5e0de702f33c",
+      "name": "Engine Hours Calculator (cb)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        1168
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "✏️ Будь ласка, введіть фактичний час початку відключення у форматі <b>ГГ:ХХ</b> (наприклад, <code>13:45</code>):",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "cd0a3ca4-b743-455a-b23a-47943e75aa13",
+      "name": "Telegram: Prompt actual start",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2048,
+        1344
+      ],
+      "webhookId": "b1d495ad-d2f8-433b-a122-726736155899",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "time-valid-check",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4836f43f-0d01-4189-a749-4a2d995677e0",
+      "name": "Time valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3408,
+        1664
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "✏️ Тепер введіть фактичний час закінчення відключення у форматі <b>ГГ:ХХ</b> (наприклад, <code>17:30</code>):",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "6222e18e-ee7b-4957-b79a-e7befbadb129",
+      "name": "Telegram: Prompt actual end",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3792,
+        1584
+      ],
+      "webhookId": "869382c3-cac4-4096-85da-5fe45f61185f",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "time-valid-check-end",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "20bcce62-54cc-450e-8b44-79b0ccddca0b",
+      "name": "Time valid? (end)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3408,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wWIWt4lPJXctaE07",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wWIWt4lPJXctaE07",
+          "cachedResultName": "SmartGen - Engine Hours Calculator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "e816fe9e-41a9-4fde-aae3-794672bb2ebc",
+      "name": "Engine Hours Calculator (adjust)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        4624,
+        1904
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "={{ $json.generator_name }} - об'єм {{ $json.tank_volume_litres }} літрів",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Обрати",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Callback Data').item.json.callback_value.validCallBack[2] }}:{{ $json.generator_id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "33e156f3-bac6-4a67-ba29-cc41ab0d13f3",
+      "name": "Select refuel generator",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2496,
+        320
+      ],
+      "webhookId": "e8d792b1-1e45-47c0-b909-fb4285b41387",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  g.id AS generator_id,\n  g.name AS generator_name,\n  g.tank_volume_litres\nFROM generators g\nJOIN locations l ON l.id = g.location_id\nWHERE l.company_id = '{{ $json.company_id }}'\n  AND l.is_active = true\n  AND g.is_active = true\n  AND (\n    '{{ $json.role }}' IN ('owner', 'manager')\n    OR l.id = (SELECT location_id FROM invite_codes WHERE used_by = '{{ $json.user_id }}' LIMIT 1)\n  );",
+        "options": {}
+      },
+      "id": "faa0908b-48f1-437e-812a-480f09dd120f",
+      "name": "Get generators (refuel)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2304,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=Company - {{ $('Get User state').item.json.company_name }}\n⛽ Оберіть генератор для заправки:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "b034a0d1-677a-4a1d-b390-edadb0b43847",
+      "name": "Select message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2496,
+        176
+      ],
+      "webhookId": "ea17cad6-37e5-4328-8df8-d0cbb53c0765",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS generator_id, name AS generator_name, tank_volume_litres\nFROM generators\nWHERE id = '{{ $json.value }}';",
+        "options": {}
+      },
+      "id": "733fefc3-395b-409a-bad7-3978d5fe1465",
+      "name": "Refuel details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        1520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users\nSET telegram_state = '{\"state\": \"awaiting_refuel_volume\", \"generator_id\": \"{{ $json.generator_id }}\", \"generator_name\": \"{{ $json.generator_name }}\", \"tank_volume_litres\": {{ $json.tank_volume_litres }} }'::jsonb\nWHERE id = '{{ $('Get User state').item.json.user_id }}'\nRETURNING '{{ $json.generator_name }}'::text AS generator_name, {{ $json.tank_volume_litres }}::numeric AS tank_volume_litres;",
+        "options": {}
+      },
+      "id": "674b3629-eaf6-4b7a-bfc2-6e91e19bfee1",
+      "name": "Set state (refuel cb)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2048,
+        1520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=⛽ Введіть кількість літрів заправки для генератора\n<b>{{ $json.generator_name }}</b> (об'єм баку: {{ $json.tank_volume_litres }} л):",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "3a5118aa-8111-4cd9-9dd7-31c9f06304c6",
+      "name": "Prompt refuel volume (cb)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        1520
+      ],
+      "webhookId": "383318c6-5825-4ad8-8c4b-c2f9a8d1cbaa",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $('Parser tg trigger').item.json.text;\nconst state = $json.telegram_state;\nconst volume = parseFloat(text.replace(',', '.'));\nconst tankVolume = parseFloat(state.tank_volume_litres);\n\nconst isValid = !isNaN(volume) && volume > 0 && volume <= tankVolume * 2;\nreturn [{\n  json: {\n    ...$json,\n    volume: isValid ? volume : null,\n    is_valid: isValid,\n    generator_id: state.generator_id,\n    generator_name: state.generator_name,\n    tank_volume_litres: tankVolume\n  }\n}];"
+      },
+      "id": "6764caee-09a7-4cf3-95a4-208161df1b2e",
+      "name": "Validate volume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3024,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO fuel_logs (generator_id, type, volume_litres, added_by, note)\nVALUES ('{{ $json.generator_id }}', 'income', {{ $json.volume }}, '{{ $json.user_id }}', 'Заправка через Telegram-бот')\nRETURNING id;",
+        "options": {}
+      },
+      "id": "b2e93415-b340-4157-b0f2-af8306eabc63",
+      "name": "Insert fuel log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3408,
+        864
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE generators\nSET current_fuel_litres = LEAST(current_fuel_litres + {{ $('Validate volume').item.json.volume }}, tank_volume_litres)\nWHERE id = '{{ $('Validate volume').item.json.generator_id }}'\nRETURNING current_fuel_litres;",
+        "options": {}
+      },
+      "id": "532d812e-d3cd-495d-bd4e-b4a7aac20cfb",
+      "name": "Update generator fuel",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3568,
+        864
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users SET telegram_state = NULL WHERE id = '{{ $('Get User state').item.json.user_id }}'\nRETURNING {{ $('Update generator fuel').item.json.current_fuel_litres }}::numeric AS current_fuel_litres;",
+        "options": {}
+      },
+      "id": "949a7a99-474f-4dd5-8682-0322b1db0265",
+      "name": "Clear state (refuel)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3728,
+        864
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=✅ Заправку зафіксовано для генератора - <b>{{ $('Validate volume').item.json.generator_name }}</b>.\n\nДодано: <b>{{ $('Validate volume').item.json.volume }} л</b>\nПоточний залишок: <b>{{ $json.current_fuel_litres }} л</b> ({{ Math.round($json.current_fuel_litres / $('Validate volume').item.json.tank_volume_litres * 100) }}% баку)",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "2455a07b-90c3-4350-81fb-5698e45935a0",
+      "name": "Refuel success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3888,
+        864
+      ],
+      "webhookId": "c704f7cc-065c-4d96-8346-1c64fd2e4046",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=❌ Некоректне значення. Будь ласка, введіть числове значення більше нуля та не більше ніж подвійний об'єм баку ({{ $json.tank_volume_litres * 2 }} л):",
+        "additionalFields": {}
+      },
+      "id": "3cdfb52f-4f06-4b4f-b794-bb7660847435",
+      "name": "Invalid volume",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3408,
+        1008
+      ],
+      "webhookId": "e21cd696-e36e-45b5-82ed-514cd69d9aea",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  g.id AS generator_id,\n  g.name AS generator_name,\n  g.tank_volume_litres\nFROM generators g\nJOIN locations l ON l.id = g.location_id\nWHERE l.company_id = '{{ $json.company_id }}'\n  AND l.is_active = true\n  AND g.is_active = true\n  AND (\n    '{{ $json.role }}' IN ('owner', 'manager')\n    OR l.id = (SELECT location_id FROM invite_codes WHERE used_by = '{{ $json.user_id }}' LIMIT 1)\n  );",
+        "options": {}
+      },
+      "id": "4b0bf32b-badc-4503-9a56-3abe812f5ae9",
+      "name": "Get generators (maint)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2496,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=Company - {{ $('Get User state').item.json.company_name }}\n🛠️ Оберіть генератор для скидання ТО:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "75f325f7-6420-4192-a4b6-15f4d846d003",
+      "name": "Select message1",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        416
+      ],
+      "webhookId": "ea17cad6-37e5-4328-8df8-d0cbb53c0765",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "={{ $json.generator_name }} - об'єм {{ $json.tank_volume_litres }} літрів",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Обрати",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Callback Data').item.json.callback_value.validCallBack[3] }}:{{ $json.generator_id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c16585ce-ee65-411e-b88d-5823d54f9393",
+      "name": "Select maint generator",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        560
+      ],
+      "webhookId": "e8d792b1-1e45-47c0-b909-fb4285b41387",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS generator_id, name AS generator_name\nFROM generators\nWHERE id = '{{ $json.value }}';",
+        "options": {}
+      },
+      "id": "39c2acdb-857f-45cf-88a9-f8862d5e0aed",
+      "name": "Maint details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        1696
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users\nSET telegram_state = '{\"state\": \"awaiting_pin\", \"generator_id\": \"{{ $json.generator_id }}\", \"generator_name\": \"{{ $json.generator_name }}\"}'::jsonb\nWHERE id = '{{ $('Get User state').item.json.user_id }}'\nRETURNING '{{ $json.generator_name }}'::text AS generator_name;",
+        "options": {}
+      },
+      "id": "302f833b-bb49-4c43-8aa2-f3b96f3dd708",
+      "name": "Set state (maint cb)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2048,
+        1696
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=🛠️ Для скидання лічильника ТО для генератора \n<b>{{ $json.generator_name }}</b> введіть ваш 4-значний пін-код:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "18e35893-8cdc-40ed-a734-da3c385ebb06",
+      "name": "Prompt PIN (cb)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        1696
+      ],
+      "webhookId": "b785a64c-bec6-4cfd-9179-314c74c61905",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM users\nWHERE id = '{{ $json.user_id }}'\n  AND pin_code = crypt('{{ $('Parser tg trigger').item.json.text }}', pin_code);",
+        "options": {}
+      },
+      "id": "8517a546-b46b-4951-8973-48a78d7be849",
+      "name": "Verify PIN",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3200,
+        1168
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users SET telegram_state = NULL WHERE id = '{{ $('Get User state').item.json.user_id }}';",
+        "options": {}
+      },
+      "id": "1a9ab6db-da90-4add-aa5f-7157b209c392",
+      "name": "Clear state (pin fail)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3584,
+        1248
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "❌ Невірний пін-код. Скидання ТО скасовано. Спробуйте ще раз за допомогою меню.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "ef717043-90d8-41dc-bd33-a29d3e82c731",
+      "name": "PIN incorrect",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3744,
+        1248
+      ],
+      "webhookId": "742adc1e-e43f-42d4-abe2-e54090cd8a5b",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO maintenance_logs (generator_id, hours_at_reset, reset_by, notes)\nVALUES (\n  '{{ $('Get User state').item.json.telegram_state.generator_id }}',\n  (SELECT hours_since_last_service FROM generators WHERE id = '{{ $('Get User state').item.json.telegram_state.generator_id }}'),\n  '{{ $('Get User state').item.json.user_id }}',\n  'Скидання ТО через Telegram-бот'\n);",
+        "options": {}
+      },
+      "id": "5b4d10f1-dfca-4f00-b0a7-4b5aa9b5d957",
+      "name": "Log maintenance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3584,
+        1088
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE generators\nSET hours_since_last_service = 0,\n    status = 'ok'\nWHERE id = '{{ $('Get User state').item.json.telegram_state.generator_id }}';",
+        "options": {}
+      },
+      "id": "095bd432-0384-41fc-ba93-fb802bde1a30",
+      "name": "Reset generator hours",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3744,
+        1088
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users SET telegram_state = NULL WHERE id = '{{ $('Get User state').item.json.user_id }}';",
+        "options": {}
+      },
+      "id": "3f302884-8b26-45bb-807f-fe44c24b6da0",
+      "name": "Clear state (pin success)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3904,
+        1088
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=✅ Лічильник ТО для генератора - <b>{{ $('Get User state').item.json.telegram_state.generator_name }}</b> успішно скинуто.\n\nНаступне планове обслуговування через 50 моточасів.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "66e3d0ed-0d20-4c5a-86a3-cf8bf5cd90dd",
+      "name": "Maint reset success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4064,
+        1088
+      ],
+      "webhookId": "a3d10f2d-d6f2-470e-a374-82d815f8d76f",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=Company - {{ $('Get User state').item.json.company_name }}\n⚠️ Оберіть генератор з яким виникли проблеми:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "030fd5bb-5996-4e45-9115-ff981cb4bf9b",
+      "name": "Select message2",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2880,
+        656
+      ],
+      "webhookId": "ea17cad6-37e5-4328-8df8-d0cbb53c0765",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  g.id AS generator_id,\n  g.name AS generator_name,\n  g.tank_volume_litres\nFROM generators g\nJOIN locations l ON l.id = g.location_id\nWHERE l.company_id = '{{ $('Get User state').item.json.company_id }}'\n  AND l.is_active = true\n  AND g.is_active = true\n  AND (\n    '{{ $('Get User state').item.json.role }}' IN ('owner', 'manager', 'staff')\n    OR l.id = (SELECT location_id FROM invite_codes WHERE used_by = '{{ $('Get User state').item.json.user_id }}' LIMIT 1)\n  );",
+        "options": {}
+      },
+      "id": "ef4e01cc-2b3d-4b90-96e5-044632237067",
+      "name": "Get generators (problem)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2688,
+        720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "={{ $json.generator_name }} - об'єм {{ $json.tank_volume_litres }} літрів",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Обрати",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Callback Data').item.json.callback_value.validCallBack[4] }}:{{ $json.generator_id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "22540245-a968-447c-bf16-22e3701916eb",
+      "name": "Select report generator",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2880,
+        800
+      ],
+      "webhookId": "e8d792b1-1e45-47c0-b909-fb4285b41387",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users\nSET telegram_state = '{\"state\": \"awaiting_problem_report\", \"generator_id\": \"{{ $json.generator_id }}\", \"generator_name\": \"{{ $json.generator_name }}\"}'::jsonb\nWHERE id = '{{ $('Get User state').item.json.user_id }}'\nRETURNING '{{ $json.generator_name }}'::text AS generator_name;",
+        "options": {}
+      },
+      "id": "ecc939bf-c025-4a7d-93ad-f5ce080e48c3",
+      "name": "Set state (problem)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2048,
+        1872
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS generator_id, name AS generator_name, tank_volume_litres\nFROM generators\nWHERE id = '{{ $json.value }}';",
+        "options": {}
+      },
+      "id": "5bc42ee1-3556-4d80-9bdd-508828dc4d54",
+      "name": "Report details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        1872
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=⚠️ Будь ласка, детально опишіть проблему з генератором\n<b>{{ $json.generator_name }}</b>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "24b707d3-13d2-4ee6-9388-fd502ae88981",
+      "name": "Prompt problem (cb)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2208,
+        1872
+      ],
+      "webhookId": "25526def-be6c-41bf-bc35-e2f09402766e",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH gen_data AS (\n  SELECT g.location_id, l.name AS loc_name\n  FROM generators g\n  LEFT JOIN locations l ON g.location_id = l.id\n  WHERE g.id = '{{ $('Get User state').item.json.telegram_state.generator_id }}'\n)\nINSERT INTO alerts (company_id, generator_id, location_id, type, message)\nSELECT \n  '{{ $('Get User state').item.json.company_id }}',\n  '{{ $('Get User state').item.json.telegram_state.generator_id }}',\n  gen_data.location_id,\n  'problem_report',\n  '⚠️ Повідомлення про проблему від {{ $('Get User state').item.json.full_name }} ({{ $('Get User state').item.json.telegram_state.generator_name }}): {{ $('Parser tg trigger').item.json.text }}'\nFROM gen_data\nRETURNING id, (SELECT loc_name FROM gen_data) AS location_name;",
+        "options": {}
+      },
+      "id": "4a8b28e0-47d3-4bd1-9cf2-1038f0f5f996",
+      "name": "Save alert to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3056,
+        1328
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.telegram_id FROM users u\nJOIN user_company_memberships m ON m.user_id = u.id\nWHERE m.company_id = '{{ $('Get User state').item.json.company_id }}'\n  AND m.role IN ('owner', 'manager')\n  AND u.telegram_id IS NOT NULL;",
+        "options": {}
+      },
+      "id": "4319406c-126f-4242-8223-a01b6d5b6266",
+      "name": "Get recipients (problem)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3232,
+        1328
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users SET telegram_state = NULL WHERE id = '{{ $('Get User state').item.json.user_id }}';",
+        "options": {}
+      },
+      "id": "75c2f5cf-2791-4d6a-92d4-6133e75db7b9",
+      "name": "Clear state (problem)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3232,
+        1488
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "✅ Дякуємо! Керівництво компанії сповіщено про проблему.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "63aea550-7f5f-47f2-a26b-55fc318bc295",
+      "name": "Problem success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3408,
+        1488
+      ],
+      "webhookId": "b717facd-772e-430b-b8f4-ddf5b155666b",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=⚠️ <b>Проблема на локації {{ $('Save alert to DB').first().json.location_name }}</b>\n\n<b>Від:</b> {{ $('Get User state').item.json.full_name }}\n<b>Опис:</b> {{ $('Parser tg trigger').item.json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "516929f5-6f8a-489f-986b-f720d9773008",
+      "name": "Alert managers",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3408,
+        1328
+      ],
+      "webhookId": "337af65f-9e90-4c2e-8ce9-e7bb9b21dea1",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  g.name AS generator_name,\n  g.accumulated_hours,\n  g.hours_since_last_service,\n  g.maintenance_interval_hours,\n  g.current_fuel_litres,\n  g.tank_volume_litres,\n  g.consumption_per_hour,\n  g.status,\n  l.name AS location_name\nFROM generators g\nJOIN locations l ON l.id = g.location_id\nWHERE l.company_id = '{{ $json.company_id }}'\n  AND l.is_active = true\n  AND g.is_active = true\n  AND (\n    '{{ $json.role }}' IN ('owner', 'manager')\n    OR l.id = (SELECT location_id FROM invite_codes WHERE used_by = '{{ $json.user_id }}' LIMIT 1)\n  )\nORDER BY g.name ASC;",
+        "options": {}
+      },
+      "id": "d8bb64c4-1f03-4d21-8728-073780508f4d",
+      "name": "Get status data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2336,
+        880
+      ],
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "9b6e8cc9-ba7a-4df2-b0a1-22e323c176d7",
+      "name": "Send status",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        880
+      ],
+      "webhookId": "4e06786a-781b-4db2-b8da-2be033ad9e2a",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const generators = $input.all().map(item => item.json);\nif (generators.length === 0) {\n  return [{ json: { text: \"❌ Для вашої локації не знайдено активних генераторів.\" } }];\n}\n\nconst locationName = generators[0].location_name;\nlet text = `📍 <b>${locationName}</b>\\n\\n`;\n\nfor (const gen of generators) {\n  const hoursService = parseFloat(gen.hours_since_last_service) || 0;\n  const interval = parseFloat(gen.maintenance_interval_hours) || 50;\n  const servicePct = Math.min(Math.round((hoursService / interval) * 100), 100);\n\n  const currentFuel = parseFloat(gen.current_fuel_litres) || 0;\n  const tankVolume = parseFloat(gen.tank_volume_litres) || 0;\n  const fuelPct = tankVolume > 0 ? Math.min(Math.round((currentFuel / tankVolume) * 100), 100) : 0;\n\n  const consumption = parseFloat(gen.consumption_per_hour) || 0;\n  const hoursLeft = consumption > 0 ? Math.round((currentFuel / consumption) * 10) / 10 : 0;\n\n  const statusEmoji = gen.status === 'critical' ? '🔴' : gen.status === 'warning' ? '🟡' : '🟢';\n\n  text += `⚙️ <b>${gen.generator_name}</b>\\n`;\n  text += `${statusEmoji} ТО: ${hoursService}/${interval} год (${servicePct}%)\\n`;\n  text += `⛽ Паливо: ${currentFuel} л (${fuelPct}%) — ~${hoursLeft} год роботи\\n\\n`;\n}\n\nreturn [{ json: { text: text.trim() } }];"
+      },
+      "id": "66857946-7027-4abc-8239-ffe31ac1ab96",
+      "name": "Format Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE outage_logs\nSET actual_start = planned_start,\n    actual_end = planned_end,\n    is_confirmed = true,\n    confirmed_by = '{{ $('Get User state').item.json.user_id }}',\n    confirmed_at = NOW(),\n    source = 'staff'\nWHERE id = '{{ $json.value }}'\nRETURNING id, location_id, planned_start, planned_end;",
+        "options": {}
+      },
+      "id": "d7ff4792-d558-4a36-a71d-d2be9aaf602e",
+      "name": "Confirm outage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        1168
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users\nSET telegram_state = '{\"state\": \"awaiting_actual_start\", \"outage_log_id\": \"{{ $json.value }}\"}'::jsonb\nWHERE id = '{{ $('Get User state').item.json.user_id }}';",
+        "options": {}
+      },
+      "id": "37cfeb57-f28a-468c-a2b8-6ffaf6eb0f27",
+      "name": "Set state (adjust)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        1344
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $('Parser tg trigger').first().json.text.trim();\nconst state = $json.telegram_state;\nconst timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;\n\nconst isValid = timeRegex.test(text);\nreturn [{\n  json: {\n    ...$json,\n    is_valid: isValid,\n    actual_start_time: isValid ? text : null,\n    outage_log_id: state.outage_log_id\n  }\n}];"
+      },
+      "id": "7f790ecf-745c-4e34-a3b8-ee833d1ff0a8",
+      "name": "Validate actual start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        1664
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "❌ Невірний формат часу. Будь ласка, введіть час початку у форматі <b>ГГ:ХХ</b> (наприклад, <code>13:45</code>):",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "8ee2351f-b492-43c6-9676-d596a42913c9",
+      "name": "Invalid start time",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3600,
+        1744
+      ],
+      "webhookId": "0a6b6028-00da-461b-8f94-bd76877cac5f",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users\nSET telegram_state = '{\"state\": \"awaiting_actual_end\", \"outage_log_id\": \"{{ $json.outage_log_id }}\", \"actual_start_time\": \"{{ $json.actual_start_time }}\"}'::jsonb\nWHERE id = '{{ $json.user_id }}';",
+        "options": {}
+      },
+      "id": "1522d12f-cf66-42d7-b846-079bbfa53b97",
+      "name": "Set state (awaiting end)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3600,
+        1584
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $('Parser tg trigger').first().json.text.trim();\nconst state = $json.telegram_state;\nconst timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;\n\nconst isValid = timeRegex.test(text);\nreturn [{  json: {\n    ...$json,\n    is_valid: isValid,\n    actual_end_time: isValid ? text : null,\n    actual_start_time: state.actual_start_time,\n    outage_log_id: state.outage_log_id\n  }\n}];"
+      },
+      "id": "26a392d5-1b38-4964-bf68-9c6b8e4f1164",
+      "name": "Validate actual end",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "❌ Невірний формат часу. Будь ласка, введіть час закінчення у форматі <b>ГГ:ХХ</b> (наприклад, <code>17:30</code>):",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c0c30f40-335f-423c-897c-d10cf9264318",
+      "name": "Invalid end time",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3600,
+        2080
+      ],
+      "webhookId": "4ea62125-9aa3-46f8-be1c-65963d57ef56",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT planned_start FROM outage_logs WHERE id = '{{ $json.outage_log_id }}';",
+        "options": {}
+      },
+      "id": "7c44ca82-9aec-4ea5-b412-e4e9102ed01c",
+      "name": "Get planned details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3600,
+        1904
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned = $('Get planned details').first().json.planned_start;\nconst plannedDate = new Date(planned);\n\n// Format to Kyiv date string YYYY-MM-DD\nconst dateStr = plannedDate.toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });\n\nreturn [{\n  json: {\n    ...$json,\n    date_str: dateStr\n  }\n}];"
+      },
+      "id": "7c2d8e8f-f94d-4e17-8b49-7e7da6602598",
+      "name": "Build ISO timestamps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3792,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE outage_logs\nSET actual_start = ('{{ $json.date_str }} {{ $('Validate actual end').item.json.actual_start_time }}:00'::timestamp AT TIME ZONE 'Europe/Kyiv'),\n    actual_end = ('{{ $json.date_str }} {{ $('Validate actual end').item.json.actual_end_time }}:00'::timestamp AT TIME ZONE 'Europe/Kyiv'),\n    is_confirmed = true,\n    confirmed_by = '{{ $('Get User state').item.json.user_id }}',\n    confirmed_at = NOW(),\n    source = 'staff'\nWHERE id = '{{ $('Get User state').item.json.telegram_state.outage_log_id }}';",
+        "options": {}
+      },
+      "id": "fe117017-40eb-47ff-be14-5c2736adf366",
+      "name": "Update outage adjusted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4000,
+        1904
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE users SET telegram_state = NULL WHERE id = '{{ $('Get User state').item.json.user_id }}';",
+        "options": {}
+      },
+      "id": "4b3ea9c1-e5b4-4338-a98f-89445c747a4d",
+      "name": "Clear state (adjust)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4208,
+        1904
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=✅ Час відключення скориговано та підтверджено: <b>{{ $('Validate actual end').item.json.actual_start_time }} — {{ $('Validate actual end').item.json.actual_end_time }}</b>.\n\nДякуємо за допомогу!",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "af1a2145-9287-4026-a925-e96f99f852ac",
+      "name": "Adjust success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4416,
+        1904
+      ],
+      "webhookId": "e244109f-43f7-4d1c-9575-b74dd48918bb",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "Вітаємо у SmartGen! 🔌\n\nВи не зареєстровані в системі. Будь ласка, введіть  код реєстрації, наданий вашим керівником:",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "da1149fe-ce93-49d9-8451-78cdcd682c02",
+      "name": "Ask for code",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2080,
+        208
+      ],
+      "webhookId": "614d85fc-37eb-411a-ad78-5a4ed42eab49",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS invite_code_id, company_id, location_id, role\nFROM invite_codes\nWHERE code = '{{ $json.invite_code }}'\n  AND expires_at > NOW()\n  AND used_by IS NULL;",
+        "options": {}
+      },
+      "id": "1c705cb8-c16c-4c53-bf96-ed7a72843249",
+      "name": "Get invite details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2080,
+        64
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $('Parser tg trigger').first().json.text || '';\nlet invite_code = null;\n\n// Якщо користувач перейшов за посиланням або ввів /start КОД\nif (text.startsWith('/start ')) {\n  invite_code = text.split(' ')[1].trim();\n} \n// Або якщо він просто скопіював і відправив сам код текстом\nelse if (!text.startsWith('/') && text.trim().length > 0) {\n  invite_code = text.trim();\n}\n\nreturn {\n  ...$input.item.json,\n  invite_code: invite_code\n};\n"
+      },
+      "id": "6fc53ea7-2d57-4c39-acc2-6a685e58b095",
+      "name": "Parse invite code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0578c9da-a5e0-451a-b229-961fbe5dafc1",
+              "leftValue": "={{ $json.invite_code }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1904,
+        128
+      ],
+      "id": "302b30c9-7041-4ec9-a74d-db879709f6ca",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "invite-valid",
+              "leftValue": "={{ $input.all() }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "lengthGt",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fc31de61-5de7-4b8a-9db8-b6c282d51c33",
+      "name": "Invite valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2304,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse invite code').item.json.chat_id }}",
+        "text": "❌ Невірний або прострочений код реєстрації. Будь ласка, зверніться до власника бізнесу для отримання нового коду.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "564d26a2-b801-4be2-b0ff-0723137ac147",
+      "name": "Send invalid code",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2496,
+        0
+      ],
+      "webhookId": "74c6ece1-065f-4201-b499-f4f1f643080d",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH new_user AS (\n  INSERT INTO users (id, full_name, telegram_id, telegram_state)\n  VALUES (\n    gen_random_uuid(), \n    '{{ $('Parse invite code').item.json.fist_name }}', \n    {{ $('Parse invite code').item.json.user_id }},\n    jsonb_build_object('active_company_id', '{{ $json.company_id }}'::uuid)\n  )\n  RETURNING id, full_name\n),\nnew_membership AS (\n  INSERT INTO user_company_memberships (user_id, company_id, role)\n  SELECT id, '{{ $json.company_id }}'::uuid, '{{ $json.role }}'\n  FROM new_user\n  RETURNING role, company_id\n)\nSELECT \n  u.id, \n  m.company_id, \n  m.role, \n  u.full_name\nFROM new_user u\nCROSS JOIN new_membership m;",
+        "options": {}
+      },
+      "id": "9501304f-6efd-4813-8fba-1652f1fb3a4d",
+      "name": "Create User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2496,
+        -160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE invite_codes\nSET used_by = '{{ $json.id }}'\nWHERE id = '{{ $('Get invite details').item.json.invite_code_id }}';",
+        "options": {}
+      },
+      "id": "73cb3023-81a0-4942-a196-8c327f5c06cc",
+      "name": "Update Invite",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2672,
+        -160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse invite code').item.json.chat_id }}",
+        "text": "=✅ Реєстрація успішна! Ласкаво просимо до SmartGen.\n\nВаша роль: <b>{{ $('Create User').item.json.role }}</b>.\n\nСкористайтеся меню нижче для роботи з генераторами:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "aeba0aaa-c09d-4583-9675-01b028653df1",
+      "name": "Send welcome + keyboard",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2848,
+        -160
+      ],
+      "webhookId": "ea17cad6-37e5-4328-8df8-d0cbb53c0765",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "70ca7fe5-9877-40fe-9093-90f1a62773a4",
+              "leftValue": "={{ $json.invite_code }}",
+              "rightValue": "link_account_",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1712,
+        80
+      ],
+      "id": "ab9de67d-6ee6-4745-9aaf-f3799350c62b",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH updated_user AS (\n  UPDATE users\n  SET telegram_id = {{ $('Parser tg trigger').item.json.user_id }}\n  WHERE id = '{{ $('Parse invite code').item.json.invite_code.replace(\"link_account_\", \"\") }}'::uuid\n    AND telegram_id IS NULL\n  RETURNING id, full_name\n)\n\nSELECT \n  u.id,\n  m.company_id,\n  m.role,\n  u.full_name\nFROM updated_user u\nJOIN user_company_memberships m \n  ON m.user_id = u.id;",
+        "options": {}
+      },
+      "id": "169ccd64-ea6e-47a3-856b-b545bd5f53bf",
+      "name": "Add telegram_id",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1904,
+        -32
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parser tg trigger').item.json.chat_id }}",
+        "text": "=✅ Реєстрація успішна! Ласкаво просимо до SmartGen.\n\nВаша роль: <b>{{ $('Add telegram_id').item.json.role }}</b>.\n\nСкористайтеся меню нижче для роботи з генераторами:",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "36c5a1f0-15fe-45eb-875a-34f510e48d39",
+      "name": "Send welcome + keyboard1",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2080,
+        -112
+      ],
+      "webhookId": "ea17cad6-37e5-4328-8df8-d0cbb53c0765",
+      "credentials": {
+        "telegramApi": {
+          "id": "EsoiOQPRM5qtQLmT",
+          "name": "SmartGen Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get User state": {
+      "main": [
+        [
+          {
+            "node": "User found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User found?": {
+      "main": [
+        [
+          {
+            "node": "Switch  message type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse invite code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback Data": {
+      "main": [
+        [
+          {
+            "node": "Parser tg trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser tg trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch  message type": {
+      "main": [
+        [
+          {
+            "node": "Switch solution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find the button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Message Trigger": {
+      "main": [
+        [
+          {
+            "node": "Callback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the button": {
+      "main": [
+        [
+          {
+            "node": "Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch solution": {
+      "main": [
+        [
+          {
+            "node": "Get generators (refuel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get generators (maint)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get generators (problem)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get status data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: Main Menu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch solution1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Volume valid?": {
+      "main": [
+        [
+          {
+            "node": "Insert fuel log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PIN correct?": {
+      "main": [
+        [
+          {
+            "node": "Log maintenance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clear state (pin fail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Confirm outage edit": {
+      "main": [
+        [
+          {
+            "node": "Engine Hours Calculator (cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time valid?": {
+      "main": [
+        [
+          {
+            "node": "Set state (awaiting end)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid start time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time valid? (end)": {
+      "main": [
+        [
+          {
+            "node": "Get planned details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid end time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get generators (refuel)": {
+      "main": [
+        [
+          {
+            "node": "Select message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select refuel generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select message": {
+      "main": [
+        []
+      ]
+    },
+    "Callback": {
+      "main": [
+        [
+          {
+            "node": "Confirm outage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set state (adjust)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refuel details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Maint details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refuel details": {
+      "main": [
+        [
+          {
+            "node": "Set state (refuel cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set state (refuel cb)": {
+      "main": [
+        [
+          {
+            "node": "Prompt refuel volume (cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch solution1": {
+      "main": [
+        [
+          {
+            "node": "Validate volume",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Verify PIN",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save alert to DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate actual start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate actual end",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate volume": {
+      "main": [
+        [
+          {
+            "node": "Volume valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert fuel log": {
+      "main": [
+        [
+          {
+            "node": "Update generator fuel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update generator fuel": {
+      "main": [
+        [
+          {
+            "node": "Clear state (refuel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear state (refuel)": {
+      "main": [
+        [
+          {
+            "node": "Refuel success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get generators (maint)": {
+      "main": [
+        [
+          {
+            "node": "Select message1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select maint generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maint details": {
+      "main": [
+        [
+          {
+            "node": "Set state (maint cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set state (maint cb)": {
+      "main": [
+        [
+          {
+            "node": "Prompt PIN (cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify PIN": {
+      "main": [
+        [
+          {
+            "node": "PIN correct?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear state (pin fail)": {
+      "main": [
+        [
+          {
+            "node": "PIN incorrect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log maintenance": {
+      "main": [
+        [
+          {
+            "node": "Reset generator hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset generator hours": {
+      "main": [
+        [
+          {
+            "node": "Clear state (pin success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear state (pin success)": {
+      "main": [
+        [
+          {
+            "node": "Maint reset success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get generators (problem)": {
+      "main": [
+        [
+          {
+            "node": "Select message2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select report generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report details": {
+      "main": [
+        [
+          {
+            "node": "Set state (problem)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set state (problem)": {
+      "main": [
+        [
+          {
+            "node": "Prompt problem (cb)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save alert to DB": {
+      "main": [
+        [
+          {
+            "node": "Get recipients (problem)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Clear state (problem)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get recipients (problem)": {
+      "main": [
+        [
+          {
+            "node": "Alert managers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear state (problem)": {
+      "main": [
+        [
+          {
+            "node": "Problem success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get status data": {
+      "main": [
+        [
+          {
+            "node": "Format Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Status": {
+      "main": [
+        [
+          {
+            "node": "Send status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm outage": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Confirm outage edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set state (adjust)": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Prompt actual start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate actual start": {
+      "main": [
+        [
+          {
+            "node": "Time valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set state (awaiting end)": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Prompt actual end",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate actual end": {
+      "main": [
+        [
+          {
+            "node": "Time valid? (end)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get planned details": {
+      "main": [
+        [
+          {
+            "node": "Build ISO timestamps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build ISO timestamps": {
+      "main": [
+        [
+          {
+            "node": "Update outage adjusted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update outage adjusted": {
+      "main": [
+        [
+          {
+            "node": "Clear state (adjust)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear state (adjust)": {
+      "main": [
+        [
+          {
+            "node": "Adjust success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adjust success": {
+      "main": [
+        [
+          {
+            "node": "Engine Hours Calculator (adjust)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get invite details": {
+      "main": [
+        [
+          {
+            "node": "Invite valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse invite code": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get invite details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask for code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invite valid?": {
+      "main": [
+        [
+          {
+            "node": "Create User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send invalid code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create User": {
+      "main": [
+        [
+          {
+            "node": "Update Invite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Invite": {
+      "main": [
+        [
+          {
+            "node": "Send welcome + keyboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Add telegram_id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add telegram_id": {
+      "main": [
+        [
+          {
+            "node": "Send welcome + keyboard1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1ceb2c84-e31a-4841-8e58-f1f6bc70240a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "ikW61vBRmcAj7tSA",
+  "tags": []
+}

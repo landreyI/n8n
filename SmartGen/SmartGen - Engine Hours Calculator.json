@@ -1,0 +1,458 @@
+{
+  "name": "SmartGen - Engine Hours Calculator",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        944
+      ],
+      "id": "db68a5ad-353d-49ab-b78c-0ce8f28f3e70",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst outageStart = new Date(data.actual_start ?? data.planned_start);\nconst outageEnd   = new Date(data.actual_end   ?? data.planned_end);\nconst workingHours = data.working_hours;\n\nfunction getKyivDateString(date) {\n  const formatter = new Intl.DateTimeFormat('sv-SE', {\n    timeZone: 'Europe/Kyiv',\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit'\n  });\n  return formatter.format(date);\n}\n\nfunction getKyivDayName(date) {\n  const formatter = new Intl.DateTimeFormat('en-US', {\n    timeZone: 'Europe/Kyiv',\n    weekday: 'long'\n  });\n  return formatter.format(date).toLowerCase();\n}\n\nfunction getKyivOffsetMinutes(dateStr) {\n  const formatter = new Intl.DateTimeFormat('en', {\n    timeZone: 'Europe/Kyiv',\n    timeZoneName: 'longOffset'\n  });\n  const parts = formatter.formatToParts(new Date(`${dateStr}T12:00:00Z`));\n  const tzName = parts.find(p => p.type === 'timeZoneName')?.value ?? 'GMT+02:00';\n  const match  = tzName.match(/GMT([+-])(\\d{2}):(\\d{2})/);\n  if (!match) return 120;\n  const sign = match[1] === '+' ? 1 : -1;\n  return sign * (parseInt(match[2]) * 60 + parseInt(match[3]));\n}\n\nfunction toUtcDate(dateStr, timeStr) {\n  const offsetMins = getKyivOffsetMinutes(dateStr);\n  const [h, m] = timeStr.split(':').map(Number);\n  const minutesUtc = (h * 60 + m) - offsetMins;\n  const result = new Date(`${dateStr}T00:00:00Z`);\n  result.setUTCMinutes(result.getUTCMinutes() + minutesUtc);\n  return result;\n}\n\nlet totalDuration = 0;\nlet firstSessionStart = null;\nlet lastSessionEnd = null;\n\nconst startKyivStr = getKyivDateString(outageStart);\nconst endKyivStr = getKyivDateString(outageEnd);\n\nlet currentKyivDate = new Date(`${startKyivStr}T12:00:00Z`);\nconst endKyivDate = new Date(`${endKyivStr}T12:00:00Z`);\n\nwhile (currentKyivDate <= endKyivDate) {\n  const currentStr = getKyivDateString(currentKyivDate);\n  const dayName = getKyivDayName(currentKyivDate);\n  \n  const schedule = workingHours[dayName];\n  if (schedule && schedule.isOpen) {\n    const workOpen = toUtcDate(currentStr, schedule.start);\n    let workClose = toUtcDate(currentStr, schedule.end);\n    \n    if (workClose <= workOpen && schedule.end === \"00:00\") {\n      workClose = new Date(workClose.getTime() + 24 * 60 * 60 * 1000);\n    }\n    \n    const segStart = new Date(Math.max(outageStart.getTime(), workOpen.getTime()));\n    const segEnd = new Date(Math.min(outageEnd.getTime(), workClose.getTime()));\n    \n    if (segStart < segEnd) {\n      const durationHours = (segEnd - segStart) / (1000 * 60 * 60);\n      totalDuration += durationHours;\n      if (!firstSessionStart) firstSessionStart = segStart.toISOString();\n      lastSessionEnd = segEnd.toISOString();\n    }\n  }\n  \n  currentKyivDate.setUTCDate(currentKyivDate.getUTCDate() + 1);\n}\n\nreturn [{\n  json: {\n    outage_log_id:  data.outage_log_id,\n    location_id:    data.location_id,\n    company_id:     data.company_id,\n    location_name:  data.location_name,\n    duration_hours: Math.round(totalDuration * 1000) / 1000,\n    session_start:  firstSessionStart,\n    session_end:    lastSessionEnd\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        912
+      ],
+      "id": "32cb44c4-a0d6-4595-9062-4af0b6817d2c",
+      "name": "Calculate intersection"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        544,
+        816
+      ],
+      "id": "4a314d1c-eab7-4ff8-b11e-5c312d9d38b6",
+      "name": "Split outages"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "15cbab23-7962-4c96-8ec8-dd50563a4cb2",
+              "leftValue": "={{ $input.all() }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "lengthGt",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        272,
+        880
+      ],
+      "id": "7322fe68-ff11-49dc-9bc9-e782cd61bf91",
+      "name": "Any outages?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  ol.id                AS outage_log_id,\n  ol.planned_start,\n  ol.planned_end,\n  ol.actual_start,\n  ol.actual_end,\n  ol.is_confirmed,\n  ol.location_id,\n  l.working_hours,\n  l.company_id,\n  l.name               AS location_name\nFROM outage_logs ol\nJOIN locations l ON l.id = ol.location_id\nWHERE ol.is_calculated = false\n  AND l.is_active = true\n  AND (\n    ol.actual_end IS NOT NULL \n    OR (ol.planned_end < NOW() AND ol.is_confirmed = false)\n  )\nORDER BY ol.created_at ASC\nLIMIT 10;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        96,
+        880
+      ],
+      "id": "d37b1ebf-d7ca-4dd3-82ae-2e7456245672",
+      "name": "Get unprocessed outages",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ea95d3a3-0f10-4c8b-b6b0-3f2ecb818744",
+              "leftValue": "={{ $json.duration_hours }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        912
+      ],
+      "id": "b9130ff0-9b3d-45da-b8a5-45974906a178",
+      "name": "Duration > 0?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id                        AS generator_id,\n  consumption_per_hour,\n  load_factor,\n  accumulated_hours,\n  hours_since_last_service,\n  current_fuel_litres,\n  tank_volume_litres,\n  maintenance_interval_hours\nFROM generators\nWHERE location_id = '{{ $('Calculate intersection').item.json.location_id }}'\n  AND is_active = true;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1184,
+        816
+      ],
+      "id": "f2dd0fb7-3f63-419d-b497-9455b4df1efb",
+      "name": "Get generators",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const intersection = $('Calculate intersection').item.json;\nconst generators = $input.all();\n\nreturn generators.map(g => {\n  const gen = g.json;\n\n  // Парсимо всі числові поля з рядків\n  const accumulatedHours       = parseFloat(gen.accumulated_hours)        || 0;\n  const hoursSinceService      = parseFloat(gen.hours_since_last_service) || 0;\n  const currentFuel            = parseFloat(gen.current_fuel_litres)      || 0;\n  const consumptionPerHour     = parseFloat(gen.consumption_per_hour)     || 0;\n  const loadFactor             = parseFloat(gen.load_factor)              || 0.75;\n  const tankVolume             = parseFloat(gen.tank_volume_litres)       || 0;\n  const maintenanceInterval    = parseFloat(gen.maintenance_interval_hours) || 50;\n\n  const fuelConsumed = Math.round(\n    intersection.duration_hours * consumptionPerHour * loadFactor * 1000\n  ) / 1000;\n\n  const newFuelLitres = Math.max(\n    Math.round((currentFuel - fuelConsumed) * 100) / 100,\n    0\n  );\n\n  return {\n    json: {\n      generator_id:   gen.generator_id,\n      outage_log_id:  intersection.outage_log_id,\n      location_id:    intersection.location_id,\n      company_id:     intersection.company_id,\n\n      session_start:  intersection.session_start,\n      session_end:    intersection.session_end,\n      duration_hours: intersection.duration_hours,\n      fuel_consumed:  fuelConsumed,\n\n      new_accumulated_hours:        Math.round((accumulatedHours + intersection.duration_hours) * 100) / 100,\n      new_hours_since_last_service: Math.round((hoursSinceService + intersection.duration_hours) * 100) / 100,\n      new_fuel_litres:              newFuelLitres,\n      fuel_went_negative:           (currentFuel - fuelConsumed) < 0,\n\n      tank_volume_litres:         tankVolume,\n      maintenance_interval_hours: maintenanceInterval,\n      consumption_per_hour:       consumptionPerHour\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        816
+      ],
+      "id": "76fe101c-76bb-49b9-bd05-e1d73e6d1a73",
+      "name": "Prepare generator data"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH new_session AS (\n  INSERT INTO generator_sessions\n    (generator_id, outage_log_id, session_start, session_end, duration_hours, fuel_consumed, source)\n  VALUES (\n    '{{ $json.generator_id }}',\n    '{{ $json.outage_log_id }}',\n    '{{ $json.session_start }}',\n    '{{ $json.session_end }}',\n    {{ $json.duration_hours }},\n    {{ $json.fuel_consumed }},\n    'auto'\n  )\n  RETURNING id\n),\nnew_fuel_log AS (\n  INSERT INTO fuel_logs\n    (generator_id, type, volume_litres, session_id)\n  SELECT\n    '{{ $json.generator_id }}',\n    'expense',\n    {{ $json.fuel_consumed }},\n    id\n  FROM new_session\n),\nupdate_generator AS (\n  UPDATE generators SET\n    accumulated_hours        = {{ $json.new_accumulated_hours }},\n    hours_since_last_service = {{ $json.new_hours_since_last_service }},\n    current_fuel_litres      = {{ $json.new_fuel_litres }}\n  WHERE id = '{{ $json.generator_id }}'\n)\nSELECT id AS session_id FROM new_session;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1536,
+        816
+      ],
+      "id": "113314b6-1484-46d8-9089-d3de31809ce0",
+      "name": "Save session + fuel + update generator",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE outage_logs\nSET is_calculated = true\nWHERE id = '{{ $('Calculate intersection').item.json.outage_log_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1712,
+        816
+      ],
+      "id": "924fcb3b-06c5-4e74-b2e8-04521a720e56",
+      "name": "Mark as calculated",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE outage_logs\nSET is_calculated = true\nWHERE id = '{{ $('Calculate intersection').item.json.outage_log_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1184,
+        960
+      ],
+      "id": "d1718fb8-3d6b-4261-a06b-bf9b33d12c62",
+      "name": "Mark as calculated1",
+      "credentials": {
+        "postgres": {
+          "id": "yGzVBmS8Fr4W5Q0D",
+          "name": "SmartGen Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "y8xXUPGGkMjbnMPk",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/y8xXUPGGkMjbnMPk",
+          "cachedResultName": "SmartGen - Alerts Checker"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "generator_id": "={{ $('Prepare generator data').item.json.generator_id }}"
+          },
+          "matchingColumns": [
+            "generator_id"
+          ],
+          "schema": [
+            {
+              "id": "generator_id",
+              "displayName": "generator_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1888,
+        816
+      ],
+      "id": "a6a67ac5-974c-445c-8367-846c70bebdb3",
+      "name": "Alerts Checker",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        800
+      ],
+      "id": "957b4bee-81dd-480e-b824-4256cef00d44",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get unprocessed outages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate intersection": {
+      "main": [
+        [
+          {
+            "node": "Duration > 0?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split outages": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Calculate intersection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any outages?": {
+      "main": [
+        [
+          {
+            "node": "Split outages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get unprocessed outages": {
+      "main": [
+        [
+          {
+            "node": "Any outages?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duration > 0?": {
+      "main": [
+        [
+          {
+            "node": "Get generators",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as calculated1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get generators": {
+      "main": [
+        [
+          {
+            "node": "Prepare generator data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare generator data": {
+      "main": [
+        [
+          {
+            "node": "Save session + fuel + update generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save session + fuel + update generator": {
+      "main": [
+        [
+          {
+            "node": "Mark as calculated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as calculated1": {
+      "main": [
+        [
+          {
+            "node": "Split outages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as calculated": {
+      "main": [
+        [
+          {
+            "node": "Alerts Checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get unprocessed outages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerts Checker": {
+      "main": [
+        [
+          {
+            "node": "Split outages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2419d935-17d0-4ffa-bf73-7d0efe705097",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "wWIWt4lPJXctaE07",
+  "tags": []
+}

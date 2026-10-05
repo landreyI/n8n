@@ -1,0 +1,951 @@
+{
+  "name": "Swallowing (parsing stream)",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        304,
+        -80
+      ],
+      "id": "e30fdab6-6fba-4e6d-a8a0-29b965923ecf",
+      "name": "RSS Read"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        80
+      ],
+      "id": "8ac89d8f-0585-4f49-94ad-a4ff86b31836",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "html": "={{ $json.data }}",
+        "selectors": {
+          "selectorValues": [
+            {
+              "name": "post_container",
+              "selector": "div.tgme_widget_message_wrap",
+              "returnHTML": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-cheerio-html-parser.cheerioHTMLParser",
+      "typeVersion": 1,
+      "position": [
+        480,
+        80
+      ],
+      "id": "b448c85b-984d-41c2-b517-0d68943d0fb7",
+      "name": "Cheerio HTML Parser"
+    },
+    {
+      "parameters": {
+        "html": "={{ $json[\"results.post_container\"] }}",
+        "selectors": {
+          "selectorValues": [
+            {
+              "name": "body",
+              "selector": ".tgme_widget_message_text"
+            },
+            {
+              "name": "url",
+              "selector": ".tgme_widget_message_date",
+              "attribute": "href"
+            },
+            {
+              "name": "publish_date",
+              "selector": ".tgme_widget_message_date time",
+              "attribute": "datetime"
+            },
+            {
+              "name": "author",
+              "selector": ".tgme_widget_message_owner_name"
+            },
+            {
+              "name": "url_author",
+              "selector": ".tgme_widget_message_owner_name",
+              "attribute": "href"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-cheerio-html-parser.cheerioHTMLParser",
+      "typeVersion": 1,
+      "position": [
+        832,
+        80
+      ],
+      "id": "b89b6942-e1e6-46b8-9fc2-2c86ba8c6736",
+      "name": "Cheerio HTML Parser1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results.post_container",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        656,
+        80
+      ],
+      "id": "bbab05a8-12f5-49f1-af7b-cff5fd438cbe",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "rss",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "427c76e6-821a-44ee-9e4c-ca07f94b9e05"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "rss"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0b9481a5-7843-4aa9-b435-8776a9885616",
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "tg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tg"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "41edd44b-65b3-4b6d-b6fe-a9c13258c42b",
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "youtube",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "youtube"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "90a38ede-b3dc-4ecc-993c-414a3a566559",
+                    "leftValue": "={{ $json.source_type }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "linkedin"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        0,
+        64
+      ],
+      "id": "a15af7a2-e84c-486d-8a50-3d2b779897ef",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1264,
+        64
+      ],
+      "id": "38d2cfe3-26a0-4e04-a6ef-b6b5da5c5263",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ea21d0b-7238-4e85-8876-98fa2dbda8ad",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "3d8289ae-77fc-4c92-8fca-cde6249ab38b",
+              "name": "body",
+              "value": "={{ $json.content\n.replace(/\\s\\s+/g, ' ')\n.replace(/<[^>]*>/g, '')\n.replaceAll('&amp;', '&')\n.replaceAll('&#32;', ' ')\n.replaceAll('&#39;', '`')\n.replaceAll('&quot;', '\"')\n}}",
+              "type": "string"
+            },
+            {
+              "id": "345144e2-d40c-478a-acef-58eb9b6af2b9",
+              "name": "url",
+              "value": "={{ $json.link }}",
+              "type": "string"
+            },
+            {
+              "id": "c2b791d8-2b1c-4f29-ab51-0fbb15b30785",
+              "name": "publish_date",
+              "value": "={{ $json.pubDate }}",
+              "type": "string"
+            },
+            {
+              "id": "9b43086a-8044-4c46-bd37-619b43801a5f",
+              "name": "author",
+              "value": "={{ $json.author }}",
+              "type": "string"
+            },
+            {
+              "id": "d7b0fdc7-7a9d-4ef2-ad11-f8a37d1bc0f2",
+              "name": "source_type",
+              "value": "={{ $('Switch').first().json.source_type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        -80
+      ],
+      "id": "864d58ca-307c-4436-82be-c3815749d274",
+      "name": "Edit Fields",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ea21d0b-7238-4e85-8876-98fa2dbda8ad",
+              "name": "title",
+              "value": "={{ $json.results.body.first().substring(0, 100) }}",
+              "type": "string"
+            },
+            {
+              "id": "3d8289ae-77fc-4c92-8fca-cde6249ab38b",
+              "name": "body",
+              "value": "={{ $json.results.body.join(\", \") }}",
+              "type": "string"
+            },
+            {
+              "id": "345144e2-d40c-478a-acef-58eb9b6af2b9",
+              "name": "url",
+              "value": "={{ $json.results.url.first() }}",
+              "type": "string"
+            },
+            {
+              "id": "c2b791d8-2b1c-4f29-ab51-0fbb15b30785",
+              "name": "publish_date",
+              "value": "={{ $json.results.publish_date.first() }}",
+              "type": "string"
+            },
+            {
+              "id": "9b43086a-8044-4c46-bd37-619b43801a5f",
+              "name": "author",
+              "value": "={{ $json.results.author.first() }}",
+              "type": "string"
+            },
+            {
+              "id": "4f04c2a7-ecf9-4290-a671-7bbfe2622924",
+              "name": "source_type",
+              "value": "={{ $('Switch').first().json.source_type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        80
+      ],
+      "id": "421e33ff-5cff-4a12-91de-a17607d43b85",
+      "name": "Edit Fields2",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "type": "SHA256",
+        "value": "={{ $json.url + $json.publish_date + $json.body.substring(0, 500) }}",
+        "dataPropertyName": "dedupe_hash"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        80
+      ],
+      "id": "d2e1b51a-de65-4fc4-9c7f-74b7e737568c",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        112
+      ],
+      "id": "1b57489e-e4f9-4fa2-9958-a21aac55c4c2",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "=sources",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=is_active",
+              "condition": "eq",
+              "keyValue": "={{ true }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        112
+      ],
+      "id": "bef03089-6edd-420b-99a1-71272742f3ec",
+      "name": "Get many rows",
+      "credentials": {
+        "supabaseApi": {
+          "id": "a9YsSHip9SsGls3r",
+          "name": "Supabase auto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "2JcCwxnSG14FFsYc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/2JcCwxnSG14FFsYc",
+          "cachedResultName": "Get Config"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -352,
+        112
+      ],
+      "id": "bd78364c-70a5-4649-ac93-587d63eb7194",
+      "name": "Data"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.rss_url }}?format=json",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        432
+      ],
+      "id": "6cc42bcb-2411-4efc-a36d-fef610e0937f",
+      "name": "HTTP Request1",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Отримуємо вхідне посилання від користувача\nconst url = $input.item.json.url;\n\nlet rss_url = null;\nlet source_type = null;\nlet handle = null;\nlet channelId = null;\n\n// КРИТИЧНО: Ми повинні перевіряти найбільш специфічні посилання (з /posts) ПЕРШИМИ.\n\nif (url.includes('/posts') || url.includes('/community')) {\n    // --- 1. Пости Спільноти (Найвищий пріоритет) ---\n    source_type = 'community';\n    \n    if (url.includes('/@')) {\n        // Формат: https://www.youtube.com/@handle/posts\n        handle = '@' + url.split('/@')[1].split('/')[0];\n        rss_url = `https://rsshub.app/youtube/community/${handle}`;\n    } else if (url.includes('/channel/')) {\n        // Формат: https://www.youtube.com/channel/UC.../community\n        channelId = url.split('/channel/')[1].split('/')[0];\n        rss_url = `https://rsshub.app/youtube/community/${channelId}`;\n    } else {\n        throw new Error('Не вдалося розпарсити @handle або ID каналу зі посилання на спільноту.');\n    }\n\n} else if (url.includes('/playlist?list=')) {\n    // --- 2. Плейлист ---\n    source_type = 'playlist';\n    const playlistId = url.split('?list=')[1].split('&')[0];\n    rss_url = `https://rsshub.app/youtube/playlist/${playlistId}`;\n\n} else if (url.includes('/channel/')) {\n    // --- 3. Канал (Відео) ---\n    source_type = 'channel_video';\n    channelId = url.split('/channel/')[1].split('/')[0];\n    rss_url = `https://rsshub.app/youtube/channel/${channelId}`;\n\n} else if (url.includes('/@') || url.includes('/user/')) {\n    // --- 4. Handle/User (Відео) ---\n    source_type = 'user_video';\n    handle = url.includes('/@') \n      ? '@' + url.split('/@')[1].split('/')[0] \n      : url.split('/user/')[1].split('/')[0];\n      \n    rss_url = `https://rsshub.app/youtube/user/${handle}`;\n\n} else {\n    // Якщо посилання не розпізнано\n    throw new Error(`Непідтримуваний формат URL: ${url}`);\n}\n\n// 3. Повертаємо результат\nreturn {\n  json: {\n    ...$input.item.json, // Зберігаємо всі вхідні дані\n    rss_url: rss_url,\n    source_type_youtube: source_type\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        224
+      ],
+      "id": "82001f4d-bc8b-4b01-bd0a-e8abfeee85a3",
+      "name": "Normalization url"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ea21d0b-7238-4e85-8876-98fa2dbda8ad",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "3d8289ae-77fc-4c92-8fca-cde6249ab38b",
+              "name": "body",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "345144e2-d40c-478a-acef-58eb9b6af2b9",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "c2b791d8-2b1c-4f29-ab51-0fbb15b30785",
+              "name": "publish_date",
+              "value": "={{ $json.date_published }}",
+              "type": "string"
+            },
+            {
+              "id": "9b43086a-8044-4c46-bd37-619b43801a5f",
+              "name": "author",
+              "value": "={{ $json.authors.map(a => a.name).join(', ') }}",
+              "type": "string"
+            },
+            {
+              "id": "d7b0fdc7-7a9d-4ef2-ad11-f8a37d1bc0f2",
+              "name": "source_type",
+              "value": "={{ $('Switch').item.json.source_type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        304
+      ],
+      "id": "fc38c4db-df19-43b6-9950-fd57ae1abdd1",
+      "name": "Edit Fields1",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Отримуємо вхідне посилання від користувача\nconst url = $input.item.json.url;\n\nlet rss_url = null;\nlet source_type = null;\n\n// 2. \"Маршрутизатор\" + \"Будівельник\"\n// Пріоритет на сторінки компаній, оскільки їх парсинг надійніший\n\nif (url.includes('/company/')) {\n    // --- 1. Сторінка Компанії (Надійний маршрут) ---\n    const companyId = url.split('/company/')[1].split('/')[0];\n    rss_url = `https://rsshub.app/linkedin/company/${companyId}/posts`;\n    source_type = 'company_posts';\n\n} else if (url.includes('/in/')) {\n    // --- 2. Профіль Користувача (Ненадійний маршрут, вимагає Puppeteer) ---\n    const username = url.split('/in/')[1].split('/')[0];\n    \n    // Вирішуємо, що парсити: пости чи статті\n    // За замовчуванням беремо пости\n    let type = 'posts';\n    if (url.includes('/detail/recent-activity/articles/')) {\n        type = 'articles';\n    }\n    \n    rss_url = `https://rsshub.app/linkedin/profile/${username}/${type}`;\n    source_type = 'user_profile';\n\n} else {\n    // Якщо посилання не розпізнано\n    throw new Error(`Непідтримуваний формат URL LinkedIn: ${url}`);\n}\n\n// 3. Повертаємо результат\nreturn {\n  json: {\n    ...$input.item.json,\n    rss_url: rss_url,\n    source_type_linkedin: source_type\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        352
+      ],
+      "id": "ed878e92-28a0-499b-a4e9-02f816f5b653",
+      "name": "Normalization url1"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        288
+      ],
+      "id": "255e1f78-046a-4c9a-81d5-19bbe98332e5",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        832,
+        304
+      ],
+      "id": "7abe17d3-2eef-495e-8b6f-dd1f18fc2e9a",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d781f746-49a6-4766-9053-91fab3d4458a",
+              "leftValue": "={{ $json.publish_date }}",
+              "rightValue": "={{ $now.minus({ days: $('Data').first().json.statuses.time_trigger }).toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "after"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1456,
+        80
+      ],
+      "id": "64f3b566-c852-4b08-8a1c-db17188299ec",
+      "name": "Filter date"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        656,
+        320
+      ],
+      "id": "a6c13987-37e3-450d-9c37-6e43829f4c04",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        432
+      ],
+      "id": "c459980c-20d2-4bad-a7c2-01e86a3d0812",
+      "name": "Wait",
+      "webhookId": "ab71022d-de54-4dd8-b97d-dda03b29c8bc"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "statuses": {
+            "APITokenTg": "8250424825:AAEYb2CxyHDHTlKnAayLqnp-AxrBNbz8Yrg",
+            "idChatTgBot": 825278475,
+            "host_db_supabase": "https://egcjtcldwqkhxxymnxgl.supabase.co",
+            "host_db_postgresSql_supabase": "aws-1-eu-west-1.pooler.supabase.com",
+            "service_role_db_supabase": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnY2p0Y2xkd3FraHh4eW1ueGdsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTg4MTg3NSwiZXhwIjoyMDc1NDU3ODc1fQ.R2jWwFjBZje5uDc7p64yENr6TlfpdPxmCBVQEEDoQ6s",
+            "password_supabase": "A20042011p_",
+            "user_supabase": "postgres.egcjtcldwqkhxxymnxgl",
+            "google_api_key": "AIzaSyApNhedAVx9-fnr6QlBy1ANgB2ZNK-x5wc",
+            "url_model": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=",
+            "model": "text-embedding-004",
+            "status_topic": [
+              "new",
+              "drafting",
+              "review",
+              "approved",
+              "published"
+            ],
+            "length_preference_ToV": [
+              "short",
+              "medium",
+              "long"
+            ],
+            "style_ToV": [
+              "formal",
+              "informal",
+              "witty",
+              "academic",
+              "empathetic",
+              "professional",
+              "inspirational",
+              "sarcastic",
+              "sorytelling",
+              "instructive"
+            ],
+            "content_type": [
+              "News",
+              "Instruction",
+              "Analysis",
+              "Review",
+              "Announcement"
+            ],
+            "time_trigger": 1
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Cheerio HTML Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cheerio HTML Parser1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Cheerio HTML Parser": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Cheerio HTML Parser1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        []
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Filter date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        []
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many rows": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "main": [
+        [
+          {
+            "node": "Get many rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalization url": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        []
+      ]
+    },
+    "Normalization url1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter date": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "FmGQ0PD5xe3wbaDI"
+  },
+  "versionId": "58c0d876-09f8-485a-983e-b30ddc6830e8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "N1hsiKlRJPuoTx1c",
+  "tags": []
+}

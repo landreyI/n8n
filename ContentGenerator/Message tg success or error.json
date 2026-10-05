@@ -1,0 +1,330 @@
+{
+  "name": "Message tg success or error",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "={{ $('Data').item.json.statuses.idChatTgBot }}",
+        "text": "={{ $('When Executed by Another Workflow').item.json.error_text }}\nDetails: {{ JSON.stringify($json.error, null, 2) }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        176
+      ],
+      "id": "4b3647cb-92b4-4fb6-80d1-befd1d0597ef",
+      "name": "Send error",
+      "webhookId": "e29c309b-78cd-4919-b9a4-b1911fe19d1f",
+      "credentials": {
+        "telegramApi": {
+          "id": "cazdkfrsLRmehjeX",
+          "name": "Telegram auto account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Data').item.json.statuses.idChatTgBot }}",
+        "text": "={{ $('When Executed by Another Workflow').item.json.success_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        -32
+      ],
+      "id": "f0ce39e5-b943-452f-b0b7-27da79c597ee",
+      "name": "Send completed",
+      "webhookId": "e29c309b-78cd-4919-b9a4-b1911fe19d1f",
+      "credentials": {
+        "telegramApi": {
+          "id": "cazdkfrsLRmehjeX",
+          "name": "Telegram auto account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"APITokenTg\": \"\",\n  \"idChatTgBot\": 123,\n  \"success_text\": \"\",\n  \"error_text\": \"\",\n  \"response\": {}\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        80
+      ],
+      "id": "007c2a88-4861-4ad3-b11d-3c43a6348120",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7e54e842-9726-48a5-9da1-065f7c6d2737",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        528,
+        80
+      ],
+      "id": "5425d0d3-58c8-4566-82bc-dea919f521f4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ae313cfa-24c0-43cf-8a2c-17b8d8e7608a",
+              "leftValue": "={{ $('When Executed by Another Workflow').item.json.success_text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        -32
+      ],
+      "id": "885ec46c-368b-45b2-8a2c-ad02c6a7b10a",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ae313cfa-24c0-43cf-8a2c-17b8d8e7608a",
+              "leftValue": "={{ $('When Executed by Another Workflow').item.json.error_text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        176
+      ],
+      "id": "b457a7dc-41c0-41e7-9a5d-f23893d51dda",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This recursive function searches for the 'error' key at any level\nfunction findError(obj) {\n  // If it's not an object, it can't have the key\n  if (typeof obj !== 'object' || obj === null) {\n    return null;\n  }\n\n  // If the key exists at the current level, return its value\n  if (obj.hasOwnProperty('error')) {\n    return obj.error;\n  }\n\n  // If not, search through all nested objects\n  for (const key in obj) {\n    if (obj.hasOwnProperty(key)) {\n      const result = findError(obj[key]);\n      // If found in a nested object, immediately return the result\n      if (result !== null) {\n        return result;\n      }\n    }\n  }\n\n  // If nothing was found after checking everything\n  return null;\n}\n\n// Main logic\nconst item = $('When Executed by Another Workflow').first().json;\n\n// Search for the error value in the entire item\nconst errorValue = findError(item);\n\n// If an error was found...\nif (errorValue !== null) {\n  // ...return a NEW object with ONLY the error field\n  return {\n    json: {\n      error: errorValue\n    }\n  };\n} else {\n  // If no 'error' field was found anywhere, discard this item\n  return null;\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        80
+      ],
+      "id": "54b0e34a-73b8-46c1-8de5-50e7d4c995cd",
+      "name": "find error",
+      "executeOnce": false,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "2JcCwxnSG14FFsYc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/2JcCwxnSG14FFsYc",
+          "cachedResultName": "Get Config"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        176,
+        80
+      ],
+      "id": "44e83a57-e28b-41a0-be2a-ad509219441f",
+      "name": "Data"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "APITokenTg": null,
+          "idChatTgBot": null,
+          "success_text": "📝 **Profile name:** Friendly Mentor\n\n📄 **Description:** A style for educational posts on Telegram. It makes complex topics simple and understandable, encourages engagement, and uses analogies.\n\n💡 **LLM instructions:** Act as a friendly mentor and expert in your field. Your goal is to explain complex topics as simply as possible and step-by-step. Use a clear structure, lists, ask the audience questions, and maintain an encouraging tone. Use emojis for emphasis and to improve readability.\n\n✏️ **Text examples:**\n1. (Explaining a concept):\r\n\r\nWhat is an API in simple terms? 💡\r\n\r\nImagine you're at a restaurant. You (the application) don't go into the kitchen to cook your own food. You call a waiter (the API) and give them your order.\r\n\r\nThe waiter goes to the kitchen (another service), gets your prepared dish, and brings it back to you.\r\n\r\n✅ An API is that \"waiter\" which helps different programs communicate with each other and exchange data, without needing to know how the other is built internally.\r\n\r\nMake sense?\n\n2. (A step-by-step guide):\r\n\r\nPeople often ask how to start learning something new without quitting after a week. 🤔 Here’s a simple 3-step system that works:\r\n\r\n1️⃣ Break the \"elephant\" into pieces. Don't try to learn \"all of Python\" at once. Start with one tiny task, like \"write a script that adds two numbers.\"\r\n\r\n2️⃣ The 20-minute rule. Promise yourself you'll practice for just 20 minutes a day. This removes the fear of a huge task. Often, after 20 minutes, you won't want to stop!\r\n\r\n3️⃣ Find a partner. Learning with someone is much more fun and productive. You can share successes and help each other out.\r\n\r\nSo, what skill do you want to master next?\n\n3. (Busting a myth):\r\n\r\nLet's bust a popular myth: \"You need to be talented to code.\" ❌\r\n\r\nIn reality, that's not true. Talent is just a small bonus. What’s far more important are two qualities:\r\n\r\nPersistence. The ability to work on a bug and not give up until it's fixed.\r\n\r\nThe ability to Google. Nobody keeps everything in their head. Knowing how to correctly phrase a question for a search engine is 80% of success.\r\n\r\n👉 So if you've been doubting yourself because you don't feel \"talented\"—forget that. The most important thing is to start!\n\n🎨 **Style:** informal\n⏳ **Length preference:** medium\n😀 **Use emojis:** Yes\n\n⏰ **Updated at:** 2025-10-09 19:29",
+          "error_text": "❌ An error occurred while receiving the tone-of-voice!",
+          "response": {
+            "id": "5f2ec420-c907-415b-a226-e7c2bc759c8a",
+            "profile_name": "Friendly Mentor",
+            "description": "A style for educational posts on Telegram. It makes complex topics simple and understandable, encourages engagement, and uses analogies.",
+            "llm_instructions": "Act as a friendly mentor and expert in your field. Your goal is to explain complex topics as simply as possible and step-by-step. Use a clear structure, lists, ask the audience questions, and maintain an encouraging tone. Use emojis for emphasis and to improve readability.",
+            "text_examples": [
+              "(Explaining a concept):\r\n\r\nWhat is an API in simple terms? 💡\r\n\r\nImagine you're at a restaurant. You (the application) don't go into the kitchen to cook your own food. You call a waiter (the API) and give them your order.\r\n\r\nThe waiter goes to the kitchen (another service), gets your prepared dish, and brings it back to you.\r\n\r\n✅ An API is that \"waiter\" which helps different programs communicate with each other and exchange data, without needing to know how the other is built internally.\r\n\r\nMake sense?",
+              "(A step-by-step guide):\r\n\r\nPeople often ask how to start learning something new without quitting after a week. 🤔 Here’s a simple 3-step system that works:\r\n\r\n1️⃣ Break the \"elephant\" into pieces. Don't try to learn \"all of Python\" at once. Start with one tiny task, like \"write a script that adds two numbers.\"\r\n\r\n2️⃣ The 20-minute rule. Promise yourself you'll practice for just 20 minutes a day. This removes the fear of a huge task. Often, after 20 minutes, you won't want to stop!\r\n\r\n3️⃣ Find a partner. Learning with someone is much more fun and productive. You can share successes and help each other out.\r\n\r\nSo, what skill do you want to master next?",
+              "(Busting a myth):\r\n\r\nLet's bust a popular myth: \"You need to be talented to code.\" ❌\r\n\r\nIn reality, that's not true. Talent is just a small bonus. What’s far more important are two qualities:\r\n\r\nPersistence. The ability to work on a bug and not give up until it's fixed.\r\n\r\nThe ability to Google. Nobody keeps everything in their head. Knowing how to correctly phrase a question for a search engine is 80% of success.\r\n\r\n👉 So if you've been doubting yourself because you don't feel \"talented\"—forget that. The most important thing is to start!"
+            ],
+            "style": "informal",
+            "length_preference": "medium",
+            "use_emojis": true,
+            "created_at": "2025-10-09T19:29:17.439871+00:00",
+            "updated_at": "2025-10-09T19:29:17.439871+00:00"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Send completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Send error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find error": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "main": [
+        [
+          {
+            "node": "find error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "FmGQ0PD5xe3wbaDI"
+  },
+  "versionId": "e20d3a94-589f-4dc5-8356-78834f96a8f9",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "x9Pzkyf1FZZuhfS3",
+  "tags": []
+}

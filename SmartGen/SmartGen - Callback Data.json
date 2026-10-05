@@ -1,0 +1,57 @@
+{
+  "name": "SmartGen - Callback Data",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "53766b95-4430-4e2c-9727-5c14cdae0260",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = {\n  validCallBack: [\n  'confirm_outage',\n  'adjust_outage',\n  'select_generator:refuel',\n  'select_generator:maint',\n  'select_generator:report'\n  ]\n};\n\nreturn [\n  {\n    json: {\n      callback_value: data\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "a8bdccb6-6b00-40f0-b7fc-968352075390",
+      "name": "Callback Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Callback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8929992a-8261-4919-839e-5238fbeb2754",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "5JTnivZq7nNejHH5",
+  "tags": []
+}

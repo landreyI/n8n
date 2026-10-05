@@ -1,0 +1,581 @@
+{
+  "name": "Clustering | Topic Generation sub",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        864,
+        304
+      ],
+      "id": "dcbe562d-80b5-4621-8a71-5db7d3462811",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YVULSeuoqznlzFXL",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"ideas\": [\n    {\n      \"title\": \"Example of a title 1\",\n      \"why_it_matters\": \"This is important because...\",\n      \"hook\": \"Did you know that...\"\n    },\n    {\n      \"title\": \"Example of a title 2\",\n      \"why_it_matters\": \"The relevance of this topic is that...\",\n      \"hook\": \"Here's an unexpected fact:\"\n    }\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1072,
+        304
+      ],
+      "id": "c2c5e12a-bf8f-4b01-b773-d365bb8cee8a",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        304
+      ],
+      "id": "e8873017-7a11-4477-9923-2adc9d033810",
+      "name": "Google Gemini Chat Model1",
+      "notesInFlow": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YVULSeuoqznlzFXL",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalData = $('When Executed by Another Workflow').first().json;\n\nconst rawOutput = $input.first().json.output || '';\n\nlet aiData = {\n  primary_type: 'Error: I couldn`t figure out the content type.',\n  secondary_type: null\n};\n\nconst jsonMatch = rawOutput.match(/{[\\s\\S]*}/);\n\nif (jsonMatch && jsonMatch[0]) {\n  try {\n    aiData = JSON.parse(jsonMatch[0]);\n  } catch (error) {\n    console.log(\"Failed to parse JSON:\", error);\n  }\n}\n\nconst finalResult = {\n  ...originalData,\n  ...aiData\n};\n\nreturn finalResult;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        128
+      ],
+      "id": "c5635c0d-8993-467d-a950-6181c6eaa04a",
+      "name": "Normalization1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following text to determine its primary and secondary content types.\n\nInstructions:\n1.  **Primary Type**: Choose the ONE main goal of the content from the list below. This field is mandatory.\n2.  **Secondary Type**: If the content has a significant second characteristic, choose ONE from the list. If not, return null for this field.\n\n**Available Types**:\n{{ $('Data').first().json.statuses.content_type }}\n\n**Text to Analyze**:\n{{ $('When Executed by Another Workflow').item.json.content }}\n\nReturn your answer in a valid JSON format with two keys: \"primary_type\" and \"secondary_type\".\n\n**Example 1**:\nText: \"Our company just received $10M in funding to expand our AI services.\"\nYour response:\n{\n  \"primary_type\": \"\",\n  \"secondary_type\": \"\"\n}\n\n**Example 2**:\nText: \"Here are five steps to properly configure your database for production.\"\nYour response:\n{\n  \"primary_type\": \"\",\n  \"secondary_type\": null\n}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        128
+      ],
+      "id": "2470880d-d709-4a8f-ae5b-2bf7600c99b0",
+      "name": "Type content",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- 1. Подготовка данных ---\n\n// Текст кластера для анализа\nconst clusterContent = $('Normalization1').first().json.content.toLowerCase();\n\n// Все правила-кандидаты из Supabase\nconst potentialRules = $input.all().map(item => item.json);\n\n\n// --- 2. Фильтрация по ключевым словам ---\n// Отбираем все правила, которые подходят по содержанию\nconst matchedRules = potentialRules.filter(rule => {\n  // Правило без ключевых слов (общее) всегда проходит\n  if (!rule.keywords || rule.keywords.length === 0) {\n    return true;\n  }\n  // Правило с ключевыми словами проходит, если есть хотя бы одно совпадение\n  return rule.keywords.some(keyword => clusterContent.includes(keyword.toLowerCase()));\n});\n\n\n// --- 3. Выбор лучшего правила (Сортировка) ---\nif (matchedRules.length > 0) {\n  // Сортируем совпавшие правила. Логика:\n  // 1. Правила с ключевыми словами важнее, чем без них.\n  // 2. При равной специфичности, правила с большим priority важнее.\n  matchedRules.sort((a, b) => {\n    const aHasKeywords = a.keywords && a.keywords.length > 0;\n    const bHasKeywords = b.keywords && b.keywords.length > 0;\n    if (aHasKeywords !== bHasKeywords) {\n      return bHasKeywords - aHasKeywords; // true (1) будет выше, чем false (0)\n    }\n    return b.priority - a.priority;\n  });\n\n  // Победитель - первое правило в отсортированном списке\n  const winningRule = matchedRules[0];\n\n  // --- 4. Возвращаем результат С ID КАНАЛОВ ---\n  return [{\n    json: {\n      ...$('Normalization1').first().json,\n      tov_rule: winningRule,\n    }\n  }];\n\n} else {\n  // Если после всех фильтров не осталось ни одного правила\n  return [{\n    json: {\n      ...$('Normalization1').first().json,\n      tov_rule: null,\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        128
+      ],
+      "id": "440dd3dc-2295-44d9-8af9-cf366999e4a5",
+      "name": "find relevant",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  tr.id,\n  tr.name,\n  tr.content_type,\n  tr.keywords,\n  tr.priority,\n\n  -- Собираем в JSON-массив ID всех каналов, к которым привязано это правило\n  COALESCE(\n    jsonb_agg(DISTINCT trc.channel_id) FILTER (WHERE trc.channel_id IS NOT NULL),\n    '[]'::jsonb\n  ) AS id_channels,\n\n  -- Собираем полный объект профиля ToV в один JSON-объект\n  jsonb_build_object(\n    'id', tv.id,\n    'profile_name', tv.profile_name,\n    'description', tv.description,\n    'llm_instructions', tv.llm_instructions,\n    'text_examples', tv.text_examples,\n    'style', tv.style,\n    'length_preference', tv.length_preference,\n    'use_emojis', tv.use_emojis\n  ) AS tov_profile\n\nFROM\n  public.tov_rules AS tr\n\n-- Используем LEFT JOIN, чтобы получить даже те правила, что не привязаны ни к одному каналу\nLEFT JOIN\n  public.tov_rule_channels AS trc ON tr.id = trc.rule_id\n\n-- Присоединяем профили, чтобы получить все детали ToV\nLEFT JOIN\n  public.tone_of_voice_profiles AS tv ON tr.tov_id = tv.id\n\nWHERE\n  -- Правило подходит по типу контента\n  tr.content_type = '{{ $json.primary_type }}'\n\n-- Группируем по правилу и всем полям профиля, чтобы агрегация сработала корректно\nGROUP BY\n  tr.id, tv.id\n\nORDER BY\n  -- Сортировка остается такой же\n  tr.keywords IS NOT NULL DESC,\n  tr.priority DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -16,
+        128
+      ],
+      "id": "774879fa-96f3-418b-913f-eb219d2b31df",
+      "name": "Get rules",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "QdwKC2lKdqfIfojC",
+          "name": "Supabase AI_Contetn_Agent account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following content collected from recent articles:\n\n--- CONTENT START ---\n{{$json.content}}\n--- CONTENT END ---\n\nBased on this information, generate 1-2 unique and compelling post ideas.\n\nFor each idea, provide:\n1.  `title`: A catchy, short title for the topic (max 10 words).\n2.  `why_it_matters`: A brief explanation (1-2 sentences) of why this topic is important and relevant right now.\n3.  `hook`: An engaging opening sentence to grab attention.\n\nReturn your response as a JSON object with a single key \"ideas\", which is an array of objects, where each object represents a single post idea.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a professional content strategist and SMM manager for a tech blog. Your task is to analyze a piece of text or a collection of related articles and generate engaging post ideas for social media. Always respond in valid JSON format according to the user's schema."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        128
+      ],
+      "id": "8731cca5-8fc9-46fe-981b-fb889f31e2c1",
+      "name": "Generate Topic Idea",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce29edbc-9b94-4b3f-9444-ede6ab84f8ce",
+              "leftValue": "={{ $json.tov_rule }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        336,
+        128
+      ],
+      "id": "4a870fb1-fe83-44d6-ba11-c204202cd8c0",
+      "name": "Is rule"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Получаем общие данные, которые нужно добавить к каждому элементу\nconst commonData = $('find relevant').first().json;\n\n// 2. Получаем массив дефолтных тонов\nconst defaultTovs = $('Get default ToV').all();\n\n// 3. Используем .map() для создания нового массива, где каждый элемент - это комбинация\nconst result = defaultTovs.map(tovItem => {\n  // Для каждого tovItem создаем новый объект json\n  return {\n    json: {\n      ...commonData,      // Сначала добавляем общие данные\n      ...tovItem.json     // Затем добавляем данные конкретного default_tov\n    }\n  };\n});\n\n// 4. Возвращаем массив новых элементов\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        176
+      ],
+      "id": "d5e604ec-1e7a-4cc4-9c78-edf6012652dc",
+      "name": "Normalization2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        720,
+        128
+      ],
+      "id": "dbfdd35a-9d75-4678-9c2d-235917670354",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        304
+      ],
+      "id": "576f8f3c-ccfb-4ba6-8853-1cf57f10e3ec",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YVULSeuoqznlzFXL",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"relevance\": 0\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1584,
+        304
+      ],
+      "id": "76cf3b49-24fb-47f9-83e1-7a5a31b6f030",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the editor-in-chief. Our Tone of Voice: {{ JSON.stringify($json.default_tov ?? $json.tov_rule.tov_profile) }}\nOn a scale of 1 to 10, rate how well the following post topic matches this style.\nSubject: {{ JSON.stringify($json.ideas.first()) }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1408,
+        128
+      ],
+      "id": "8d05f2a9-4707-470b-9dae-a313318da4dc",
+      "name": "Get ToV Score",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normalization3').all();\nconst relevances = $input.all();\n\nreturn normalized.map((item, i) => ({\n  json: {\n    ...item.json,\n    relevance: relevances[i]?.json.output?.relevance ?? null\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        128
+      ],
+      "id": "26ed6e34-eec5-4767-b14b-b90438810a63",
+      "name": "Normalization"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Merge').all();\nconst generated = $input.all();\n\nreturn normalized.map((item, i) => ({\n  json: {\n    ...item.json,\n    ideas: generated[i]?.json.output?.ideas ?? null\n  }\n}));\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        128
+      ],
+      "id": "e69a7471-36af-48dc-a40f-f55f53306fc4",
+      "name": "Normalization3"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "2JcCwxnSG14FFsYc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/2JcCwxnSG14FFsYc",
+          "cachedResultName": "Get Config"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -848,
+        128
+      ],
+      "id": "df60026f-7ce8-47a1-800e-6e5bca1670dc",
+      "name": "Data"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1024,
+        128
+      ],
+      "id": "37be21a9-f30c-4545-909e-e66516356954",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  c.id AS channel_id,\n  c.name AS channel_name,\n\n  -- Используем CASE, чтобы вернуть NULL, если дефолтного тона нет\n  CASE\n    WHEN t.id IS NOT NULL THEN\n      -- Собираем все поля из таблицы тонов в один JSON-объект\n      jsonb_build_object(\n        'id', t.id,\n        'profile_name', t.profile_name,\n        'description', t.description,\n        'llm_instructions', t.llm_instructions,\n        'text_examples', t.text_examples,\n        'style', t.style,\n        'length_preference', t.length_preference,\n        'use_emojis', t.use_emojis\n      )\n    ELSE\n      NULL\n  END AS default_tov\n\nFROM\n  public.channels AS c\nLEFT JOIN\n  public.tone_of_voice_profiles AS t ON c.default_tov_id = t.id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -672,
+        128
+      ],
+      "id": "12b58322-adaa-4f9e-8cfb-62695a74c79b",
+      "name": "Get default ToV",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "QdwKC2lKdqfIfojC",
+          "name": "Supabase AI_Contetn_Agent account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "article_ids": [
+            "b29ed6f4-2cc0-4706-a8b0-602707d55a3a",
+            "bf47dc85-0e37-4ac8-8771-02d7182353cc"
+          ],
+          "content": "Title: ❗️Є загроза з боку Білорусі — росіяни можуть діяти через цю територію, розвідка про це попереджає, п\nBody: ❗️Є загроза з боку Білорусі — росіяни можуть діяти через цю територію, розвідка про це попереджає, партнерам вже надсилають сигнали, — Зеленський Бульбашовий напад? Україна Online | Підписатись...\n\nTitle: ❗️Є загроза з боку Білорусі — росіяни можуть діяти через цю територію, розвідка про це попереджає, п\nBody: ❗️Є загроза з боку Білорусі — росіяни можуть діяти через цю територію, розвідка про це попереджає, партнерам вже надсилають сигнали, — Зеленський   Бульбашовий напад?   Україна Online | Підписатись, ❗️Київ працює над проєктом евакуаційних автобусів для порятунку людей у разі надзвичайних ситуацій, — КМДАЦікаво...Україна Online | Підписатись...\n\n",
+          "latest_publish_date": "2025-10-15T12:00:46.000Z",
+          "frequency": 2
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Topic Idea",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Topic Idea",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Type content",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalization1": {
+      "main": [
+        [
+          {
+            "node": "Get rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Type content": {
+      "main": [
+        [
+          {
+            "node": "Normalization1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "find relevant": {
+      "main": [
+        [
+          {
+            "node": "Is rule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get rules": {
+      "main": [
+        [
+          {
+            "node": "find relevant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Topic Idea": {
+      "main": [
+        [
+          {
+            "node": "Normalization3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is rule": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalization2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalization2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Generate Topic Idea",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Get ToV Score",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Get ToV Score",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get ToV Score": {
+      "main": [
+        [
+          {
+            "node": "Normalization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalization3": {
+      "main": [
+        [
+          {
+            "node": "Get ToV Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "main": [
+        [
+          {
+            "node": "Get default ToV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get default ToV": {
+      "main": [
+        [
+          {
+            "node": "Type content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "FmGQ0PD5xe3wbaDI"
+  },
+  "versionId": "8dd0f3d7-103f-4a1e-9ae4-db93c9d62c2d",
+  "meta": {
+    "instanceId": "cc9e322092ec3ade506d1704c6c2caca7e50878945e1eb7f87ed7cc0403dbbfb"
+  },
+  "nodeGroups": [],
+  "id": "miLqg4EwRye2LQmf",
+  "tags": []
+}
